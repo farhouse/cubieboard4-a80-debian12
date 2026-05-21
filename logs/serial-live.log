@@ -1,0 +1,509 @@
+
+U-SPL 2025.04jhandirty (J 01 25 2:3:17 +00)
+DRA:2048M
+rynto boot from MMC1
+
+
+U-Bo 254joang-ir (J 01025 - 02:32:17 00) llinnr Tchnog
+
+CU:  AlwneA0 (SU9I
+Model: Cubietech Cubieboard4
+DRAM:  2 GiB
+Core:  60 devices, 17classes, devicetreeerate
+D:   Nottting watchdog@0ca0
+  otrtig whdog@8001000MMC:   mmcc0f000, m@1c100, mmc@1c11000: 1
+Loading Environment from FAT... Unableto use mc 0:2...
+n:   l@7000
+Ou:  sel@7000
+rr  sril70000
+Ne   No ethernet found.
+Hit any key to stop autoboot:  2  
+switch to partition , OK
+mmc0 is current device
+Scanning mmc02..
+Fnd U-oo scipt boo.scr
+962tesrea  4 m (234 KiB/s)
+# Execting scrpt at 300000
+50 bes ad in 24ms (21.6 Mi/s)
+11175byteread in 532s (21 MiB/s)
+24506 es re in 86 ms (2.3 KiB/s)
+Kerne image @ 02000000 [ 0x000000 - 0x530200 
+# Fltteed evie Tre blat 2300000
+   Booting using the fdt bob at 0x23000000
+Working FDT set to 23000000
+   Loading Ramdisk to 29469000, end 29fff987 ... OK
+ Loing evicTret294600, nd2949..OWoring FDT et to 29460000
+
+Starting kerne...
+
+[ 0.0000] Booting x onphysicaCP 0x0
+[  .0 Linux vesn 6.1.0-37-armmp (debian-kernel@lists.debian.org) (gcc-12 (Debian2.2.0-14+deb12u1) 12.2.0, GNU ld (GNU Binutils for Debian) 2.40) #1 SMP Debian 6.1.140-1 (2025-05-22)
+[    0.000000] CPU: ARMv7 Processor [410fc075] revision 5 (ARMv7), cr=10c5387d
+[    0.000000] CPU: div instructions available: patching division code
+[    0.000000] CPU: PIPT VIPT nonalisig data cache, VIPT aliasing instruction cache
+[    0.000000] OF: fdt: Machine model: Cubietech Cubieboard4
+[    0.00000] Memory policy: Data cache writealloc
+[    0.000000] efi: UEFI not found.
+[    0.000000] cma: Reserved 16 MiB at 0x9f000000
+[    0.000000] Zone ranges:
+[    0.000000]   DMA      [mem 0x000000020000000-0x000000004fffffff]
+[    0.000000]   Normal   empty
+[    0000000]   HihMem  [mem 0x0000000050000000-0x00000000fffffff]
+[    .000000] Movable zone start for each node
+[    0.000000] Early memory node ranges
+[    0.000000]   node   0: [mem 0x000000000000000-0x000000009fffffff]
+[    0.000000] Initmem setup node 0 [mem 0x0000000020000000-0x000000009fffffff]
+[    0.000000] percpu: Embedded 18 pages/cpu s44692 r8192 d20844 u73728
+[    0.000000] Built  zonelists, mobility grouping on.  Total pages: 52560
+[    0.000000] Kernel commnd line: root=PARTUUID=80e6fd4-02 rw otait
+[   0.000000] Dentry cache hash table entries: 131072 (rer: 7, 5248 bytes,)[    0.00000] Iode-cache hash table entries: 65536 (order: 6, 262144 bytes, linear)
+[    0.000000] mem auto-init: stack:all(zero), heap alloc:on, heap free:off
+[    0.00000] Memory: 029488K/2097152Kavailable (11264K kernel code, 1698Krwdata, 373K rodata, 2048K init, 374Kss, 51280K reserved, 16384K cma-reserved, 1294336K highmem)
+[    000000] SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=8, Nodes=1
+[    0.000000] ftrace: allocating 39672 entries in 117 pages
+[    0.00000] ftrace: allocated 117 pages with 5group
+[    0.000] trace vent string verifier disabled
+[    0.000000] rcu: Hierarchical RCU implementation.
+[    0.000000] 	Rude varian of Tasks RCU enabled.[    0.000000] 	Tracing variant of Tasks RCUnabled.
+[    0.000000] rcu: RCU calculated value of scheduler-nlistment delay is 25 jiffies.
+[    0.000000] NR_IRQS: 16, nr_irqs: 16, preallocated irqs: 16
+[    0.000000] rcu: srcu_init: Setting srcu_struct sizes based on contention.
+[    0.000000] arch_timer: cp15 timers) running at 24.00MHz (phy).
+[    0.000000] clocksource: arh_sys_counter: mask: 0xfffffffff max_cycles: 0x588fe9dc0, max_idle_ns: 440795202592 ns
+[    0.000002] sched_clock: 56 bits at 24MHz, resolution 41ns, wraps every 4398046511097ns
+[    0.000016] Switching to timer-based delay loop, resolution 41ns
+[    0.001487] clocksource: timer: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 79635851949 ns
+[    0.002838] Console: colour dummy device 80x30
+[    0.003280] printk console [ty0] enabled
+[    0.003357] Calibrating delay loop (skipped), value calculated using timer frequency.. 48.00 BogoMIPS (lpj=96000)
+[    0.003395] CPU Testing writ buffer coherenc ok
+[    0.003480] pidmax:deault: 32768 minimum: 301[    0.004013] LSM: Security Framework iitializing
+[    0.004129] landlock: Up and running.
+[    0.004147] Yama: disabled by deault; enable with sysctl kernel.yama.*
+[    0.004446] AppArmor: AppArmor initialized
+[    0.004477] TOMOYO Linux initialized
+[    0.004536] LSM support or eBPF active[004860] Mount-e hash table entries: 2048 (order: 1, 8192 bytes, linear)
+[    0.004905] Mountpoint-cache hash table entries: 2048 (order: 1, 8192 bytes, linear)
+[    0.007334] CPU0: updatecp_capaity 523
+[    0.007382] CPU0: thread -1, cpu 0, socket 0, mpidr 80000000
+[   0.008679] cblistinit_generic: Settg adjustable number of callback queues.
+[    0.008721] cblist_init_generic: Setting shift to 3 and lim to 1.
+[    0.008888] cblist_init_generi: Setting adjustable number of callback queues.
+[    0.008915] cblist_init_gneric: etting shift to 3 ad lim to 1.
+[   0.009191] Stting up static identity map for 0x20300000 - 0x203000ac
+[    0.010140] ARM CCI driver probed
+[    0.010453] sunxi multi cluster SMP support installed
+[    0.010896] rcu: Hierarchical SRCU implementation.
+[    0.010917] rcu: 	Max phase no-delay instances is 1000.
+[    0.013043] EFI services will not be available.
+[    0.014081] smp: Bringing up secondary CPUs ...
+[    0.015269] CPU1: update cpu_capacity 23
+[  0.015285] CPU1: thread -1, cpu 1, soket 0, mpidr 80000001
+[    0.016746] CPU: update cpu_capacity 523
+[    0.016762] CPU2: thread -1, cpu 2, socket 0, mpidr 80000002
+[    0.017933] CPU3: update cpu_capacity 523
+[    0.017944] CPU3: thread -1, cpu 3, socket , mpidr 80000003
+[    .019304] CPU4: update cpu_capacity 1538
+[    0.019328] CPU4: thread -1 cpu 0, scket 1, mpidr 80000100
+[   0.019354] CPU4: Spectre v2: using ICIALLU workaround
+[   0.019542] CPU4: Specte BHB: enabing loop orkarund or alPUs
+[    00212C5 updpu_capac 158
+[    0.021271] CPU5: thread -1, cpu 1, socket 1, mpidr 80000101
+[    0.021295] CPU5: Spectre v2: using ICIALLU workaround
+[    0.022793 CPU6: update cpu_capacity 1538
+[    0.022813] CPU6: thread -1, cpu 2, socket 1, mpidr80000102
+[    0.022837] CPU6: Spectre v2: using ICIALLU workaround
+[    0.024562] CPU7: update cp_capacity 1538
+[    0.024582] CPU7: thread -1, cpu 3, socket 1, mpidr 80000103
+[    0.024606] CPU7: Spectre v2: using ICIALLU workaoun
+[    0905] smp:Brought up 1 node, 8 CPs
+[    0.024968] SMP: Total of 8 processors activated (384.00 BogoMIPS).
+[    0.024992] CPU: Al CPU(s) started n SVC mode.
+[    0.027873] devtmpfs: initialized
+[    0.042731 VFP support v0.3: implementor 41 archtecture 4 part 30 variant f rev 0
+[    0.043302] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 764504178510000 ns[    0.0485 futex hah tble entris: 2048 (orde 5, 131072 bytes, linear)
+  0.045033] nctrl cre: initialzd pinctrl subsystem
+[    0.046610] DMI notpresent or invalid.
+[   0048167] NET: Registered PF_NETLINK/F_ROUTE protocol family
+[   0.060838] MA: preallocated 256 KiB pool for atomic coherent allocations
+[    0.062942] audit: initializing netlin subsys (disabled)
+[    0.063484] audit: type=2000 audit(0.060:1) state=initialized audit_enabled=0 res=1
+[    0.065776] thermal_sys: Registered thermal governor 'fair_share'
+[   0.065795] thermal_sys: Rgistere thermal goveror 'bang_bang'
+[    0.065838] thermal_sys: Registered thermal governor 'step_wise'
+[    0.065872] thermal_sys: Registered themal governor 'user_space'
+[    0.065906] thrmal: Regisrdthermal governor 'power_allocator'
+[    0062] NTs?
+   0.724] w-beakpoint: found 5 (+1 reserved) breakpoint and 4 watchpoint registers.
+[    0.066779] hw-beakpoint: maxium watchinsize is 8 bytes.
+[    0.068759] Serial: AMBA PL011 UART driver
+[    0.081218] /soc@20000/interrupt-controller@1c41000: Fixed dependency cycle(s) with /soc@20000/interrupt-contoller@1c41000
+[    0.081600] /soc@20000/display-frontend@3100000: Fixed dependency cycle(s) with /soc@20000/deu@3300000
+[    0.081983] /soc@20000/display-frontend@3140000: Fixed dependency ccle(s) with /soc@20000/deu@3340000
+[    0.082124] /soc@20000/display-backend@320000: Fixed dependency cycle(s) with /soc@20000/drc@3400000
+[    0.082300] /soc@20000/display-backend@3200000: Fixed dependency cycle(s) with /soc@20000/deu@3340000
+[    0.082474] /soc@20000/display-backend@320000: Fxed dependency cycle(s) with /soc@20000/deu@3300000
+[    0.08261] /soc@20000/display-ackend@3240000: Fixed dependency cycle(s) with /soc@20000/drc@3440000
+[    0.082792] /soc@2000/display-backend@3240000: Fixed dependency cycle(s) with /soc@20000/deu@3340000
+[    0.082970] /soc@20000/display-backend@3240000:ixeddependency cycls) with soc@20000/u33
+[    0.083199] /soc@2000/deu@3300000: Fixed dependency cycle(s) with /soc@20000/display-backend@3240000
+[    0.083389] /soc@20000/deu@3300000: Fixed dependency cycle(s) with /soc@20000/display-bacnd@3200000
+[    0.083476] /soc@20000/deu@3300000: Fixed dependency cycle(s) with /soc20000/display-frontend@3100000
+[    0.083704] /soc@20000/deu@3340000: Fixed dependency cycle(s)with /soc@20000/display-baknd@3240000[    0.083892] /soc@20000/deu@3340000: Fixed dependeny ycle(s) with /soc@20000/display-backend@3200000
+[    0.08399] /soc@20000/deu@3340000: Fixed dependency cycle(s) with /soc@20000/display-frontend3140000
+[    0.084109]/soc@20/drc@400000: Fixed dependency cycle(s) with /soc@20000/lcd-controller@3c00000
+[    0.0843] /soc@20000/drc@3400000: Fixed dependency cycle(s) with /soc@20000/display-backend@30000
+[   0.084513] @2000/drc@300: Fixe dependency cycle(s) with/soc@20000/lcd-controller@3c10000
+[    0084805] /soc@20000/drc@3440000: Fixed dependency cycle(s) with /soc@20000/display-bckend@3240000
+[   0.085141] /soc@20000/lcd-controller@3c00000: Fixed dependency cycle(s) with /soc@20000/drc@3400000
+[    0.085491] /soc@20000/lcd-controller@3c10000: ixed pendency cycle(s) with /soc@20000/drc@3440000
+[    0.086911] sram 20000.sram: can't request region for resource [mem 0x00020000-0x0005ffff]
+[    0.086973] sram 20000.sram: could not map SRAM registers    0.087011] ram: probe of 20000.sram faile with err-16
+[    0.0957] /soc@20000/display-frontend@3100000: Fixed dependency cycle(s) with /soc@20000/deu@3300000
+[    0.096668] /soc@20000/display-frontend@3140000: Fixed dependency cycle(s) with /soc@2000/eu@300
+[    0.097482] /soc@2000/display-backend@3200000: Fixed dependency cycle(s) with /soc@20000/drc@3400000[    0.097678] /soc20000/display-backend@3200000: Fixed dependency cycle(s) with /soc@20000/deu@3340000
+[   0.097893] /soc@20000/display-backend@3200000: Fixed dependency cyce(s)with /soc@20000/deu@3300000
+[    0.098744] /soc@20000/display-backend@3240000: Fxeddependency ccle(s) with /soc@20000/drc@3440000
+[    0.098944] /soc@20000/display-backend@3240000: Fix depndency cycle(s) with /soc@20000/deu@3340000
+[    0.099135] /soc@20000/display-backend@3240000: Fixed dependency cycle(s) with /soc@20000/deu@3300000
+[    0.100008] /so@20000/display-backend@3240000: Fixed dependency cycle(s) with /soc@20000/deu@3300000
+[    0.100384] /oc@20000/display-bckend@320000: Fixed dependency cycle(s) with /soc@20000/deu@3300000
+[    0.100912] /soc@20000/display-frontend@3100000: Fixed dependency cycle(s) with /soc@20000/deu@3300000
+[    0.101236] /soc@20000/deu@3300000: Fixed deendeny cycle(s with /soc@20000/disply-bckend@320000
+[  0.01593]/s@20000/deu@3300000: Fixed dependency cycle(s) with /soc@20000/display-backend@3200000
+[    0.101831] /soc@20000/deu@3300000: Fixed dependency cycle(s) with /soc@20000/display-frontend@310000
+[    .102898] /soc@20000/display-bcknd@3240000: Fixed ependency cycle(s) with /soc@20000/deu@334000
+[    0.103245] /soc@20000/display-backend@3200000: Fixed dependency cycle() with /soc@20000/deu@3340000
+[    0.103710] /soc@20000/display-frontend@3140000: Fixed dependency cycle(s) with /soc@20000/eu@3340000
+[    0.104029] /soc@20000/deu@3340000: Fixed dependency cycle(s) with /soc@20000/display-backend@3240000
+[    0.104387]/soc@20000/deu@33000: Fixed dependency cycle(s) with /soc@20000/display-backen@3200000
+[    0104591] /soc@20000/deu@3340000: Fixed dependency cycle(s) wit /soc@20000/display-frontend@3140000
+[    0.105522] /sc@20000/display-backend@3200000: Fixed dependency cycle(s) with /soc@20000/drc@40000
+[    0.105742] /soc@20000/drc@34000 Fixed dependency cycle(s) with /soc@20000/lcd-controller300000
+[    0.106072] /soc@20000/drc@3400000: Fixed dependency cycle(s) with /soc@20000/display-backend@3200000
+[    0.107002] /soc@20000/display-backed@3240000: Fixed dependency cycle(s) with /soc@20000/drc@3440000
+[    0.107213] /soc@20000/drc@3440000: Fixed dependency cycle(s) with /soc@20000/lcd-controller@3c10000
+[    0.10521] /soc@20000/drc@3440000: ixed dependency cycle(s) with /soc@20000/display-backend@3240000
+[    0.10852] /soc@20000400xed dependency cycle( with/soc@20000/lcd-controller@3c00000
+[    0.108927] /soc@20000/lcd-controller@3c00000: Fixed dependency cycle(s) with /soc@20000/drc@340000
+[    0.109738] /soc@2000/drc@34400: Fixed dependency cycle(s) with /soc@20000/lcd-controller@3c10000
+[    0.110200] /soc@20000/lcd-controller@3c10000: Fixed dependency cycle(s) with /soc@20000/drc@3440000
+[    0.1191] /s@20000/rsb@8003400: Fixed dependency cycle(s) with /soc@2000/pinctrl@8002c00/r-rsb-pins
+[    0.122210] /vga-connector: Fixed dependency cycle()with /vga-dac
+[    0.122499]/soc@20000/ld-controller@3c00000: Fixed dependency cycle(s) with /vga-dac
+[    0.122726] /vga-dac: Fixed dependency cycle(s) with /vga-connecor
+[   0.123139] /vga-dac: Fixed dependency cycle(s) with /oc@2000/lcd-cotroller@3c00000
+[    0.139146] kprobes: kprobe jump-optimiztion is enabled. All kprobes are optimized if possible.
+[    0.148260] iommu: Default domain type: Translated 
+[    0.148308] iommu: DMA domain TLB invalidation policy: strict mode 
+[    0.150241] pps_core: LinuxPPS API ver. 1 registered
+[    0.150283] pps_core:Software ver. 5.3.6 - Cpyright 2005-2007 Rodolfo Gioi <gieti@nx.it[   0.15034] PTP clock support registered
+[    0.152868] NetLabel: Initializing
+[    0.152908] NetLabel:  domain hash size = 128
+[    0.152940] NetLabel:  protocols = UNLABELED CIPSOv4 CALIPSO
+[    0.15127] NetLabel:  unlabeled traffic llowed by default
+[    0.153706] vgaarb: loaded
+[    0.154313] clocksource: Switched to clocksource arch_sys_counter
+[    0.155725] VFS: Disk quotas dquot_6.6.0
+[    0.158323] VFS: Dquot-cache hash table entries: 1024 (order 0, 4096 bytes)
+[    0.160161] AppArmor: AppArmor Filesystem Enabled
+[   0.18295] NET: Registered PF_INET protocol family
+[    0.18748] IP idents hash table entries: 16384 (order: 5, 131072 bytes, linear)
+[    0.18642] tcp_listen_portaddr_hash hash table entries: 512 (order: 0, 4096 bytes, linear)
+[    0.186669] Table-perturb hash table entis: 65536 (order: 6, 262144 bytes, linear)
+6850] TCP esablistab entes: 8192 order: 3, 3276 bytes, linear)
+[    0.187102] TCP bind hash table entries: 8192 (order: 5, 131072 bytes, linear)
+    0.187697] TP: Hash tables configure (established 8192 bind 8192)[    0188337] MPTCP token hash table entries: 1024 (order: 2, 16384 bytes, inear)
+[    0.188535] UDP hash table entries: 512 (order: 2, 16384 bytes, linear)
+[    0.188660] UDP-Lite hash table entries: 512 (order: 2, 16384 bytes, linear)
+[    .18927] NET: Registered PF_UNIX/PF_LOCAL protocol family
+[    0.189362] NET:Restered PF_XDP protocol amiy
+[    0.189411] PCI: CLS 0 bytes,default 64
+[    0.190580] Trying to unpack rootfs image as initrmfs...
+[    0.292290] Initialise system trusted keyrings
+[    0.292459] Key type blacklist registered
+[   0.292961] workingset: timestamp_bits=4 max_order=19 bucket_order=5
+[    0.311379] zbud:loaded
+[    0.315228] integrity: Platform Keyring initialized
+[    0.31534] integrity: Machinekeying intialized
+[    0.315381] Key type asymmetriregstered
+[    0.315418] Aymmetrc key parser 'x509' registered
+    1.631266] Freeing initrd memory: 11868K
+[    1.678807] alg: self-tests for CTR-KDF (hmac(sha256)) passed
+[    1.679470] bounc pool size: 64 pages
+[    1.67993] Block layer SCSI generic (bsg) driver version 0.4 loaded (major 248)
+[    1.680295] io scheduler mq-deadlie registered
+[    1.707060] sun9i-a80-r-pinctrl 8002c00.pinctrl: initialized sunX PIO driver
+[    1.737794] Serial: 8250/1650 driver, 5ports, IRQ sharing enabled
+[    1.743397] Serial: AMBA driver
+[    1.745882] STM32 USART driver initialized
+[    1.750625] mousedev: PS/2 mouse device commo for all mce
+[    1.760326] ledtrig-cpu: registered to indicate activity on CPUs
+[    1.766121] NET: Registered F_INET6 protocol family
+[    1.805448] Segment Routing with IPv6
+[    1.805587] In-situ OAM (OAM) with IPv6
+[    1.805780] mip6: Mobile IPv6
+[    1.805834] NET:Registered PF_CKET prtocol family
+   180122] mpls_go MPLS GSO support
+[   10622] ThumbEE CPU extension supportd.
+[    1.80634] Rgisering SW/SWPB emulaion handler
+[    1.8713 ristered takst versio1
+[   1.80885 Loadingcompled-inX509 certifictes
+[    2.889939] Loaded X50 cert 'ebia eure Boot CA: 6ccce7e46c0d16149f3d27dfccb419ea1'
+    .89018] Loaded X.509 cert 'Debian Secure Boot Signer 022 - linux 1401249c265ea8e51485202005105825f
+[   2897140] zswap: loade usingpool lo/zbud
+[    288870] Ke type .fcryt reistred[    2.88913] Key type fscrypt-proviioning registered
+[   2.934649] Key tye encryptedregistered
+[    2.934710 AppArm: ApArmor sha1 policyhshing enbled
+[    2.934874] im: No TP chifund, ativaingPM-bypass!
+[    2.934923] ima: Allcated hash aorithm: sha256
+[    2.935027] ia: N architecture policies foun
+[   2.93592 evmInitiaisng EVM extended tiuts:
+[  2935226] evm: secrity.selin
+[    2.935256] evm: security.SMACK64(disabled)
+[    2.35287] evm: curityMACK64EXEC (diable)
+[   2.935318] evm: security.SMACK64TRANSMUTE (sabled)
+    235348] evm: security.SMACK64MMAP (disabled)
+[    2.935377] evm: security.apparmor[   3505] v: security.im
+   2.931] vm: secitycpability
+[    2.935459] ev: HMAC attrs: 0x1
+[    4.327202] sun9i-a80-r-pinctrl 8002c00.pinctrl: supply vcc-pn not found, using dummyregulator
+[    4.38071] sunxi-rsb 8003400.rsb: RB running at 3000000 Hz
+[    4.328845] axp20x-rsb sunxi-rsb-3a3:AXP20x variant AXP809 found
+[    4.331196] axp20x-rsb sunxi-rsb-3a3:msk_nvert=true isdeprecated; plse switch to unmask_as
+[    4.333113] axp20x-gpio: Failed to loce onode[id: 1][ 4.3495 p0xrb sunxi-rb-3a3:AXP20X driver loaded
+[   4.335458 axp20x-rsbsxi-rsb-745: AXP20x vaianAXP806 ound
+   4.3641] axp20x-rsb sunxi-rsb745 mask_nvet=te s epecae; lease switch to unmask_base
+[    4.337850] axp20x-rsb sunxi-rs-745: AXP20X driver loaded
+[    43745] sn9-a8-ctrl 00.inctrl: initialize sunXi PIO driver
+[    4.361770] su9i-a80-pinctrl 6000800.pnctrl: request() failed for pin 236
+[    4.361825] sun9i-a80-pinctrl 6000800.pinctrl: pin-236 (7000000.serial) status -517
+[    .361878] sun9i-a80-pinctrl 6000800.pinctrl: could not requet pin 236 (PH12) from group PH12  on device 6000800.pinctrl
+[    4.361934]dw-apb-uart 7000000seral: Error apyin setting, reverse things back
+[    4.364816] sun9i-a80-pinctrl 6000800.pinctrl: request() failed for pin 236
+[    4.64865] sun9i-a80-pinctrl 6000800.pinctrl: pin-236 (7000000.serial) status -17
+[  .364915] sun9i-a80-pinctrl 6000800.pinctrl: could not requst pin 236 (PH12) from roup12  on device 60800.picr
+  4348d-apbuart 7000000.serial: Error applying setting, reverse things back
+[    4.367641] clk: Disabling unused clocs
+[    4.386703] Freeing unused kernelimage initmem) memory: 2048K
+[    4.387785] Checked W+X mappings: passed, noW+X pages found
+[    4.387836] Run /init as init process
+[    5.491906] sun9i-a80-pinctrl 6000800.pinctrl request() failed fo in 160
+[    5.491975] sun9-a80-pinctrl 6000800.pinctrl: pin-160 (1c0f000.mmc) status -517
+[    5.492030] sun9i-a80-pinctrl 600080pinctrl: ould not request pin 16 PF0) from grouP  on devic 6000.pintrl
+[  542091] suxi-mc 1c0f000.mmc: Error applying setting, reverse thing back
+[    5.492164] sun9i-a80-pintrl 6000800.pinctrl: request(filed for pin 192
+[    5.492222 sun9ia0-pinctrl600800.pictr: i-19 (100.mc) stats -51
+[    5.492277] sun9i-a80-pinctrl 6000800.pinctrl: could not request pin 192 (PG0)from roup PG0  o ve 6000800.pinctr
+[    5.92336] sunxi-m 1c100.mralygsettn evrse things back
+[    5.2640] ni-a80-pinctrl 000800.incrlrequet()faild or pn 7
+[    5.49690] sun-a80-pinctrl 6000800.pinctrl: pin-70 (1c11000.mmc) status -517
+[    5.492740] sun9i-a80-pinctrl 6000800.pinctrl: cold otrequest pin 70 (PC6) from group PC6  on device 6800pinctrl    5.4924] suni-mc c100.mmc: Err aying setting, reverse things back
+[    5.505841] sun9i-a80-pict600800.pinctrl: request()faile.05i-a8-pinctrl60trl: p2(700340.i2c status5.0 un-80pictl 600pould orequt pin 202 (PG10) from group PG10 on evice600080pinctl  5575]m6xi2c03400.2c: Error applying setting, reverse things back
+[    5.548453] vcc-pb-io-cam: Bringing 2800000uV into 1800000-1800000uV
+[    5.550551] vcc-dvdd-ca Brnging3000000uV into 1200000-1200000uV
+[    5.5158] vcc-pe: Binging 300000uV into 180000-100uV
+[ 5.5530 cc-wiiBnng300uVno 00000-3300000uV
+[   5.556332] vcc-pg in 380000uV nto 3000000000uV[ 574]vcc-agac-2v5: Bringing 3800000uV into 2500000-2500000uV
+[    5.582324] 00000sil: ttyS0 at MM0x700000 irq = 09 basebau= 500000 i a 6_6550A[  561410 vc12-hsic: Bringing 700000uV into 1100000-1100000uV
+[    5.618746] printk: console [ttyS0] enabled
+[    5.627237] vcc-gmac-phy:Brin 3000000uinto 330000-300V
+   7.4999 ------[ cuhere ]-----------
+[ 740mmc 1c0f0.mm: Got DGP
+[    7.480703] afvcc-cam: Bringing 70000uV into 2800000-280000uV
+[   7.48192] vcc-io-wii-codeio2: Bingig 700000uV into 3000000-3000000uV
+[   7.484699] WARNING: CPU: 4 PID:9 atlib/refcnt.c:28 sunxi_pmx_free+0x9/0xa
+[    7.50961recoun_t nderfow; useafter-ree.
+[    7.5141] Moduelinked in: axp20x_regulator i2c_mv64xx sunximmc
+[    7.514821] sxi-mmc 1c0f000.mm initialized, max. requst size: 16384 B
+[   7.521034] PU: 4 PID: 9 Comm: korker/u16:0 Not tainte 61.-37-arm #1  Deia 6.1.140
+[    7.536575 Hardware name: Allwinnerun9i Fmiy
+[    7.541311] Workueue: evnts_uboun async_run_entry_fn
+[   7.56696]  unwind_akrcefrm showstack+018/0x1c  7.551987 shw_stak rom up_tak_lvl+0x400xc
+[   7.557111  dump_stck_l fm __arn+0x80/0x11c
+[    7.561971] c: hos  t supt reang elyswitc, assuin wite-eabl
+[ .550 warn_slowpath_fmt from sunxi_pmx_free+0x98/0xa0
+[    7.578050] mmc0: new highspeed SDHC card at address 0007
+[   7.580818]  suxi_pmx_free from pin_free+0xc0/04
+  7.9 in fom pisabtting+0xb4/0x164
+[    7.597107]  pinmux_disable_setting from pil_free+0x13c/0x84/0xd0
+[    7.614212]  devres_release_all from device_unbind_cleanup+0x14/08
+[    7.10]  eviundleaup ro rellyproe0x30x3f0[   7.66672]y_por_device+0x94/
+[ 632647]  _river_bdeice from driverobe_devi   6391  drivr_probe_device from__dice_atthdrive+0xa0/0x14
+[   .6585]  _devcatac_drivr ro bu_f_ec_d+0x90xdc[    7.652136]  bus_or_each_drv from __dvice_attach_async_helper+0xb4/0xfc
+[    7.68975]  __device_ttachyncper foasync_r_entry_fnx38/0x160
+[   7.0]asn_u_nfmrceo_w0x1f8/0x4b
+[  .67223]  rcess_oe_work ro woertread04/x0c
+[  .672] workr_tread from kthea+0xd8/0xf4[   7.682686]  kthread from ret_from_fork+0x14/0x28
+[   7687446] Exception stack(0xf085dfb to 0xf08f8
+[   7.692537] dfa0:                                    00000000 00000000 00000000 00000000
+[    7700752] dfc0: 00000000 00000000 00000000 0000000 00000000 000000 00000000 000000
+    .708966] dfe0: 0000000 000000 0000 00000 0000300000
+[    7.715644] ---[ end trace 0000000000000000 ]---
+[    7.72350ebgfs: Directory '6000800.pctr-cpg' wt arnt 'vcc-pg' already present!
+[    7.723906] mmcblk0: mmc0:0007 SD8GB 7.42 GiB 
+[ 7.45126]  mmcblk0 1 p2
+[   7.7465] sunxi-mmc c11000.mmc: initialized, max. request size: 16384 KB
+[    7.751440] debgfs: Directry '6000800.pinctrl-vcc-pg' thparent 'vc-pg'aleay reent!
+[ 7.710]buf: Dirry '6000800.pinct-vcc-pg' with pa -pg aa pres[   7333]mm1: nw DRMCcard  aress001[  .90981 mck1:mm0001 NCard  7.30 GiB 
+[  7.232  mcblk p p2[  7953] mmbk1boot0: mmc1:001 NCard  4.00 MiB 
+  7.96953] mmckot: mmc1:0001 NCard  4.00 MiB [  78498 ebugfs: Directory '6000800.pinctrl-vcc-pg' wh prent'cc-p'present!
+[ 8.68] EXT4-f mmck1)mountd filesstem with ordered dat mode. Quota mode: none.
+[    8.8562 Not actatng Mandy Accesontrol  sbin/tmoyinit des not exist.
+[  11.45 syted[1System time before build time, advancing lock.
+[ 117886]sytmd1] Failed to look up mdule alas 'autos4': Function ot implemented
+[   11.63338] sted[1]: std247.3-+debu6 running n sem mode. (+PAM +DIT +SLINUX +IMA +AOR+ACK +SYNP +LIBCRYPTSETUP +GCRT +GNUT +ACL +XZ +Z4 +ZSTD +SECCOMP +BLKID +ELUTILS +KMOD +IDN2 -IDN +PCRE2 default-hierarchy=unified)
+[   11.056] em[1]Deect achiteture arm.
+
+Wlcome o [1mDebian GNLnux11 (bulleye)[0m!
+
+[ 11.687638] systemd[1 Set hostname to <debian>.
+[12.5136 sm1]: euetart job for defaut target Graphical Interface.[  3.78234 random:rng in done
+ 13.8121] ste[1]Cred slie syste-getty.slice.
+[[0;32m  O  [0m] Created slice [0;1;39msystem-getty.slice[0m.[8410] stemd]: Cated slice system-modprobeslice.
+[[;32m  O  [0m] Created slice [0;1;39msysemmodpbeie[0.
+[  3.865672stem]: Cred slisysmerial\x2dgetty.slice.
+[[0;32m  OK  [0m] Created slce [;1;39msysem-erial\x2dgetty.slice[0m.
+[   13.88990sysd[1]: atelice Ur an Ssio li.
+[[0;m  K  [0m]Cred ie [0;1;39mUser and Session Slice[0m.
+   13.911353] systemd[1]: arteDispatPassword Requets  oeiectory Watch.
+[[0;32m  OK  [0m] Srted [0;1;39mDispatch Password â€¦ts to Conso Directory atch[0m.
+[3.935]sysm1]: Srted Forward Password Requests to Wall Directory Watch.
+[[0;32m  OK  m] Started 0;1;39mForward Password Râ€¦uests to Wall Directory Watch[0m.
+[  39589] sstmd[1: Starting of Arbitrary Executable File Formats File System Automount Point not supported.
+[[0;1;38;5;185mUNSUPP[0m] Startin f [0;1;39mArbitrary Eecâ€¦Automount Point[0m not supported.
+[   13.986928] systemd[1]: Reacd trg Lancryp Vmes.
+[;32  O0m] Rache trget 0;1;39mLocal Encrypted Volumes[0m.
+[  0116]sysemd[1: Reached target Pths.
+[[0;32m  OK  [0m] Reached target [0;1;39mPaths[0m.
+[   .03069se[1 Reached target Remote Encrypted Volumes.
+[[0;32m  OK  [0m] Reached target [0;1;39mRemote Encrypted Volumes[0m.
+  14.0509] ye[: Reached arget Remote File Systems.
+[[0;32m  OK  [0m] Reached target [0;1;39mRemote File Systems[0m.
+   14074621 sysemd[]:echetargtSlces.
+[[0;32m  O  [0m] Reached target [0;1;39mSlices[0m.
+[ 40977 smd[]:Rahed rget Swap.
+[[0;32m  OK  [0m] Reached target [0;1;39mSwap[0m.
+[   4.15589] systemd[1: Lieig on inictl Compatibility Named Pipe.
+[[0;32m  OK  [0m] Listening on [0;1;39minitctl Compatibility Named Ppe[0m.
+[   1284] syemd[1: Lieni on Journl Audit Soet.
+[[0;32m  OK  [0m] Listenin on [0;1;39mJourl Audit Scket[0m.
+[   14.999] d]:Listengn JournaSocket (/dev/log).
+[[0;32m  OK  [] Litening on [0;1;39mJournal Socket (/dev/log)[0m.
+[  .18810] sysmd[: Lieni on JounalSoc
+[;32 K  [0m] Ltening on [0;1;39mJournal Socket[0m.
+1212176] system1: iteninn Networ Service Netink Socket.
+[[0;32m  OK  [0m] Listening on [0;1;39mNetwork Service Netlink Socket[0m.
+[   23649 syem1]: Listeninouv Contro cket.
+;32  [0m] Listeningon [0;1;39mudev Control Socket[m.
+[  98 systemd: Listeingon ev KernlSocket.
+[[0;32m OK  [0m]Listening on [0;1;39mudev Kernel Socket[0m.
+[   14.2091] sysemd[1]: Cnditon eck rsutd nHuge Pages File System being skipped.
+[   1419192 ste[ Mounting POSI Mesge Queue File System...
+         Mounting [0;1;39mPOSIX essag Queue File stem[0m...
+[   14.35230] st]: Mning KerneuglSystem...
+         Mounting [0;1;39mKernel Debug File System[0m...
+[  1483 sstemdMounting Kernel Trace File System...
+         Mounting [0;1;39mKernel Trace File System[0m...
+  4395] sysemdCndition check reulted in Create list of static device nodes for the current kernel being skipped.
+[   14.1509] sysem[1]Sttng Lod KrnelModle conigfs.
+         Starting [0;1;39mLoad Kernel Module configfs
+[   14.448985] system[1]:arting Load Kernel Module drm...
+         Starting [0;1;39mLoad Kernel Module drm[0m...
+[   14.477343] systemd[1]: Sarting Load Kernel Mou fue...       Starti [0;1;39mLoad Kernel Module fuse[0m...
+   14.505369] systemd[1]: Condition chec resulted in Se Up Additioal Biny Formats bein skipped.
+1541] system[1]: Starg Journal Service...
+         Starting [0;;39mJournal Service[0m...
+[ 14.446] stmd[1]:taring Lod ernel Modules..        Starting [0;1;39mLoad Kernel Modules[0m...
+[46089smd[1] Statig Remount Root and Kernel File Systems...
+         Starting [0;1;39mRemount Root and Kernel File Systms[0m...
+[   14.64272]systemd[1]: Starting Cdplug All ueDevis.
+        tarting 0;139mCldplg Al uvDevices[0m...
+[   14.04] ystem1]: MountedSIssgeQueu le System.
+[[0;32m  OK [0m] Mounted[0;1;3mPOSIX Message Queue ile System[0m.
+[   14.703710] systemd[1]: Mounteernel Debug Filstem.
+[[0;m  OK  [0m] Mot39Knl bg Fileystem[0m.
+[1.7188] sd[1untd Kernel Tce File System.
+[[;32m  OK  [0m] Monted [;1;39mKernel Trace File System[0m.
+[8213 systemd[1]: more@conffs.servi: Succeeded.
+[  7689] stemd[1]:ishedLod Kernel Module confis.
+[[0;32  OK  0m] Finihed [0;1;3Load ernlModule configfs[0m.
+[   14.799] ssemd1]: modprobe@dr.service: Succeeded.
+[   14.805] stemd]Fihed LoadKernel Module drm.
+[[0;32m  OK  [0m] Finished [0;1;39mLoad Kernel Module drm[0m.
+[ 14.84 temd]: odobe@fue.service: Succeeed.
+  14.84837 semd1]F Lad Krnel Module fuse.
+[[0;32m OK  [0m] Finished [0;1;39mLoad Kernel Module fuse[0m.
+[   7575] sstd[:Fnished Lad Kernel Modules.
+[[0;32m  OK  [0m] Finished [0;1;39mLoad Kernel Modules[0m.
+[   14.956] system[1]: iished Remount Roaen Filystems.
+[[0;32m  OK  [0m] Finished [0;1;39mRemount Root and Kernel File Systems[0m.
+[  4.9165 syem]: Srt Jourl Servce.
+[0;2m  OK  [0m] Started [0;1;3JouralSeviem.
+       ting [0;1;39mFlush Jounal to Persistent Storage[0m...
+         Startin[0;1;mLoad/Ram Sed[0m...
+      Starting [01;39mpplKeelarils[m...
+    Sat[0;1;39mCreate System Users[0m...
+[22997] systemd-ould[237] Receied clent request to flushruntime journal.
+[02m  OK0m] inshed [0;1;39mColdplug All udev Devices[0m.
+[[0;32m  OK [0] Finished01;39mAplyKernel Variables[0m.
+[  9505] sysmd-ounald[23]: Flevarlojournal/9155e28877874bc387b3ef349b68fac2/system.journal corrupted or uncleanly shut down, renaming and replaing.
+[[0;32m  OK  [0m] Finised [0;1;39mLoad/Save Random Seed[0m.
+[[032mO  [mFinie[0;139mCatestem Users[0m.
+     Statg [01;9mreteStatcie Nos in /dev[0m...
+[[0;32m  O[0m Fnise 039mFush Jural PesiteSe0m.
+[[;32  [0] Fnishd [0;1;39mCreate Static Device Nodes in /dev[0m.
+[;  O [0]Reached target [0;1;39mLocal Fileystems(re[0m.     Mouting [0;1;3tmp[0m..
+        rin[0;1;3mRue-bas Manageâ€¦for Device Events and Files[0m...
+[[0;32m OK 0m] unted [0;1;39m/tmp[0m.
+[[0;32m  OK  [0 Reached tae[01;3ocal FilSystm0m.
+       tti [0;1;39mCreate Volatile Files and Directories[0m...
+[[;32mOK  [m Finhed0;;mCreate Volatile Files and Directories[0m.
+       Starting[0;39mtwrkTme Synchronization[0m...
+        Sarn [;139pate UTP about Systm BootShutdown[0m...
+[7.22] ac10-rtc 10-rtc: DMA mask not set
+[   7.6403]c10rtc 100-c: egteedas r0
+   17.65637] ac100-rtc c10-rtcstting system clockto 1970-01-01T02:07:00 UTC (7620)
+[ 17.6572] debugfs: Drecty '6000800.pinctrl-vcc-pg' with parent 'vcc-g' already present!
+[   .669280]unxi-mmc 1c10000.mmc:atpwrseq
+[[32m K [0m Fish 0;19mpde UTMPbou System Bot/Shtdown[0m.
+[[32OK  [0m] Started[0;1;39mNeworTimSynchronization[0m.
+[0;32m O [0] eac tart;1;39mSysem Time Set[0m.
+[[0;32m OK  mReahed taget 0;3mSysm eSynchroized[0m
+[[0;32mOK  [0m] Sart[0;1;39mRule-based ManageiceEntan Filesm.
+[[0  O []Reahtarget [;1;39mSystem Initialization[0m.
+[[0;3 K  0m]Stard ;1mDalypt download activities[0m.
+[[0;32OK  [0m] Sarted [1;39mil ap upgrade and ean activities[0.[[02m  O [0m] Sted [0;1;39mPeriodi ext4 Onli¦ata Check for AllFilesystems[0m.
+[0;3m  OK [m Strtd ;1;mDiscadunuse blocke a week[0m.
+[[0;32 OK  [0m] ta[0;9ai leanu ofemparyDrcrie[0m.
+[;32  m]eached arget [0;1;39mimers[0m.
+[m  OK  0Listeningon [0;1;39mDs Systeessae BusSock[0m.[8.26308unxmm 1c1000.mmc: aaerr update clk timeout
+[   18.432599] vcc-io-wifi-codec-io2: voltage operation not allowed
+[   192024] sunxi-mmc 1c10000.mm: fal err updte clktim
+[19.0891sunxi-m 1c100.mmc: initialized, max. reqest size: 16384 KB
+[[0;  OK  0 isteng  [0;1;39mOnSDSecure Sl sever socket[0m.
+[[0;32m  O [0m] Reacd arget [1;mSots[m.
+[[0;32m  OK  [0m] Reached taret 0;1;39mBasic System[0m.
+[[0;32 OK  [0m] Started [0;1;39mD-Bus SystemMagu.         Starting [0;mRemove Stale Onliâ€¦t4 Metadata eck s
+         ing [;19mUseLogMaagement[0...
+         Startg ;1;39mNetwork Service[0m...
+[[0;3  [0m] nd device [0;1;39m/dev/ttyS0[0m.
+[  19.97804sximmc c1000mm: ataler updat clk timeout
+[ 20.738307sunxi-mmc 1c10000.mmc: l errudate l imout
+[[32  OKm] Sae [0;39UseLogin Magement[0m.
+[32m  K [0m] Started0;1;39mNetwork Service[.
+        tai [1;3Nrk ameesolution[0..
+  21.33] unximmc1c10000.mm atl err update clk timeout
+[32m  O  0m] Finished [0;1;39mRem Stale liâex4Meadata CckSnapshots[0m.
+[ 0303] sunxc 1c10000.mc: fatl err update l meou[[32m   m] Started [0;;9mNtwork Name Resolution[0m.
+[[32   [0m] Reed target [0;1;39Network[0m.
+[0mOK [0m] Reachd target [0;1;39os andNetwk Name Lookups[0m.
+         Starting [0;1Permit Ur Sessions[0m...
+[2m K  [0m] nish [0;1;39mPemit User Sesson[0m.
+[[0;32m  OK  0m] Stared [0;1;39mGettyn 0.
+[;32  K  [0m] Started [0;19merial  ottyS0[m.[[0;  O 0m]Reched targt [;1mLogin Pompts[0m.
+[[0;32m  OK  [] Rached target [0;1;39lti-User Sytem[0m.
+[32ed targe[0;1;39mGraphical Interface[0m      Stting ;1;39mUpte UTMP about Syemulevel ages[0m...[[2m    [0] inihed [0;1;39mUpdate UTMP about System Runlevel Changes[0m.
+
+Debn G/L 1bi
+bianlogin n¥Ù¹3â

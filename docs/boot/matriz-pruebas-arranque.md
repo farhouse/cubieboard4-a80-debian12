@@ -20,10 +20,11 @@ Registrar cada intento de boot con contexto suficiente para:
 
 | Fecha | Imagen / Distro | Kernel | U-Boot | Medio (eMMC/SD) | DTB/DTS | Estado | Tiempo hasta consola | Resultado breve | Evidencia |
 |---|---|---|---|---|---|---|---|---|---|
-| _(ej)_ 2026-03-12 | Armbian nightly | 6.6.x | 2024.xx | microSD | sunxi-a80-*.dtb | ⚠️ Parcial | 12s | Llega a U-Boot, no monta rootfs | `logs/2026-03-12-boot-armbian.log` |
-|  |  |  |  |  |  |  |  |  |  |
-|  |  |  |  |  |  |  |  |  |  |
-|  |  |  |  |  |  |  |  |  |  |
+| 2026-05-21 | Bookworm SD + boot-cubieboard4 | 6.1.0-37-armmp | 2025.04 johang | microSD | sun9i-a80-cubieboard4 (U-Boot stock) | ✅ OK | ~35s | Boot completo hasta login. mmc0 detectado tras parche nocd | `notes/2026-05-21-handoff-bookworm-sd-uboot.md` |
+| 2026-05-21 | Bookworm SD (DTS propio) | 6.1.0-37-armmp | 2025.04 johang | microSD | sun9i-a80-cubieboard4 (DTS editado) | ✅ OK | ~35s | USB0 habilitado, mmc1→SDIO, mmc2→eMMC. WiFi clock timeout | `notes/2026-05-21-handoff-dts-usb-wifi.md` |
+| 2026-05-21 | Bookworm SD (USB phy-supply) | 6.1.0-37-armmp | 2025.04 johang | microSD | sun9i-a80-cubieboard4 (`phy-supply`) | ✅ OK | ~35s | USB Type-A funcional: teclado Logitech enumera detras del hub 05e3:0608 | `notes/2026-05-21-handoff-usb-typea.md` |
+| 2026-05-21 | Bookworm SD (broken-cd en RAM) | 6.1.0-37-armmp | 2025.04 johang | microSD + eMMC | sun9i-a80-cubieboard4 (`broken-cd`) | ⚠️ PARCIAL | ~35s | En initramfs Linux ve la SD como `mmcblk0` y la eMMC como `mmcblk1`; falta persistir el DTB en la SD | `notes/2026-05-21-handoff-sd-usb-final.md` |
+| 2026-05-21 | Bookworm SD (DTB definitivo, USB 4 puertos) | 6.1.0-37-armmp | 2025.04 johang | microSD | sun9i-a80-cubieboard4 (`dtb/` compilado) | ✅ OK | ~35s | Boot completo. USB Type-A funcional en los 4 puertos. `broken-cd` persistente en mmc0. WiFi clock timeout. | `logs/serial-live.log` |
 
 ## Criterios de estado
 
