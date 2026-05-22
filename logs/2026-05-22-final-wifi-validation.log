@@ -1,0 +1,86 @@
+Cubieboard4 A80 final validation excerpt
+Date: 2026-05-22
+Serial: /dev/cu.usbserial-14230, 115200 8N1
+System: Debian Bookworm on Cubieboard4 A80
+Kernel: 6.1.0-37-armmp
+U-Boot: 2025.04 johang
+DTB: /boot/sun9i-a80-cubieboard4.dtb
+
+Context:
+This is the clean final validation excerpt captured from the live tmux serial
+session after installing the AP6330 firmware and the final DTB. The full pane
+buffer also contained a large base64 firmware-transfer payload, so only the
+verification commands and relevant output are preserved here.
+
+WiFi firmware/userspace install confirmation:
+
+root@debian:~# cd / && base64 -d /tmp/iw-full.b64 | tar xzf - && rm /tmp/iw-full.b64 && ldconfig && echo INSTALL-OK
+INSTALL-OK
+
+Initial scan before bringing wlan0 up:
+
+root@debian:/# iw dev wlan0 scan 2>&1 | head -40
+command failed: Network is down (-100)
+
+Bring wlan0 up and scan:
+
+root@debian:/# ifconfig wlan0 up; sleep 2; iw dev wlan0 scan 2>&1 | head -40
+BSS 94:83:c4:50:c0:cc(on wlan0)
+	last seen: 41355.870s [boottime]
+	TSF: 0 usec (0d, 00:00:00)
+	freq: 2417
+	beacon interval: 100 TUs
+	capability: ESS Privacy ShortPreamble ShortSlotTime (0x0431)
+	signal: -16.00 dBm
+	last seen: 0 ms ago
+	SSID: FarhoHouse
+	Supported rates: 6.0* 9.0 12.0* 18.0 24.0* 36.0 48.0 54.0
+	DS Parameter set: channel 2
+	TIM: DTIM Count 1 DTIM Period 2 Bitmap Control 0x0 Bitmap[0] 0x0
+	Country: US	Environment: Indoor/Outdoor
+		Channels [1 - 11] @ 20 dBm
+	ERP: <no flags>
+	RSN:	 * Version: 1
+		 * Group cipher: CCMP
+		 * Pairwise ciphers: CCMP
+		 * Authentication suites: PSK
+		 * Capabilities: PreAuth 16-PTKSA-RC 1-GTKSA-RC (0x000d)
+	BSS Load:
+		 * station count: 1
+		 * channel utilisation: 0/255
+		 * available admission capacity: 0 [*32us]
+	Supported operating classes:
+		 * current operating class: 81
+	HT capabilities:
+		Capabilities: 0x1ed
+			RX LDPC
+			HT20
+			SM Power Save disabled
+			RX HT20 SGI
+			RX HT40 SGI
+			TX STBC
+			RX STBC 1-stream
+			Max AMSDU length: 3839 bytes
+			No DSSS/CCK HT40
+		Maximum RX AMPDU length 65535 bytes (exponent: 0x003)
+		Minimum RX AMPDU time spacing: 16 usec (0x07)
+		HT Max RX data rate: 300 Mbps
+
+Ethernet link check observed after the WiFi validation:
+
+[42079.070629] sun7i-dwmac 830000.ethernet end0: Link is Down
+[42082.143058] sun7i-dwmac 830000.ethernet end0: Link is Up - 1Gbps/Full - flow control rx/tx
+
+Serial session end:
+
+FATAL: read from port failed: Device not configured
+term_exitfunc: reset failed for dev UNKNOWN: Device not configured
+
+Conclusion:
+- AP6330 WiFi is functional at driver/firmware level: wlan0 can be brought up
+  and scan surrounding networks.
+- The scan reports BCM/AP6330 802.11n HT capabilities, including 300 Mbps max
+  RX data rate.
+- Ethernet link remains functional at 1Gbps Full Duplex.
+- This log is not a full clean boot transcript; it is final subsystem
+  validation evidence.

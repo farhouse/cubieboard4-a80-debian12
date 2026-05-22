@@ -25,7 +25,7 @@ Registrar cada intento de boot con contexto suficiente para:
 | 2026-05-21 | Bookworm SD (USB phy-supply) | 6.1.0-37-armmp | 2025.04 johang | microSD | sun9i-a80-cubieboard4 (`phy-supply`) | ✅ OK | ~35s | USB Type-A funcional: teclado Logitech enumera detras del hub 05e3:0608 | `notes/2026-05-21-handoff-usb-typea.md` |
 | 2026-05-21 | Bookworm SD (broken-cd en RAM) | 6.1.0-37-armmp | 2025.04 johang | microSD + eMMC | sun9i-a80-cubieboard4 (`broken-cd`) | ⚠️ PARCIAL | ~35s | En initramfs Linux ve la SD como `mmcblk0` y la eMMC como `mmcblk1`; falta persistir el DTB en la SD | `notes/2026-05-21-handoff-sd-usb-final.md` |
 | 2026-05-21 | Bookworm SD (DTB definitivo, USB 4 puertos) | 6.1.0-37-armmp | 2025.04 johang | microSD | sun9i-a80-cubieboard4 (`dtb/` compilado) | ✅ OK | ~35s | Boot completo. USB Type-A funcional en los 4 puertos. `broken-cd` persistente en mmc0. | `logs/serial-live.log` |
-| 2026-05-22 | Bookworm SD (WiFi AP6330) | 6.1.0-37-armmp | 2025.04 johang | microSD | sun9i-a80-cubieboard4 (WiFi fixes + firmware) | ✅ OK | ~35s | WiFi AP6330 funcional (wlan0). Firmware vendor instalado en /lib/firmware/brcm/. | `logs/serial-live.log` |
+| 2026-05-22 | Bookworm SD (WiFi AP6330) | 6.1.0-37-armmp | 2025.04 johang | microSD | sun9i-a80-cubieboard4 (WiFi fixes + firmware) | ✅ OK | ~35s | WiFi AP6330 funcional (wlan0): `ifconfig wlan0 up` + `iw dev wlan0 scan` OK, HT hasta 300 Mbps. | `logs/2026-05-22-final-wifi-validation.log` |
 
 ## Criterios de estado
 

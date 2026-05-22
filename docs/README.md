@@ -10,6 +10,10 @@ Carpeta para recopilar información relevante del proyecto de revive de la Cubie
 - Troubleshooting y fixes validados
 - Decisiones técnicas consolidadas (versiones, herramientas, estrategia)
 
+## Documento principal
+
+- `estado-validado.md` → resumen consolidado de lo que ya funciona, cambios DTS/firmware aplicados, evidencia y pendientes.
+
 ## Sugerencia de organización
 
 - `hardware/` → placa, pines, alimentación, serial

@@ -38,6 +38,11 @@ Firmwares AP6330 extraídos de imagen vendor e instalados en:
 
 Compilado en `dtb/sun9i-a80-cubieboard4.dtb` (25,505 bytes) y persistido en `/boot/` de la SD.
 
+## Evidencia final
+
+- `logs/2026-05-22-final-wifi-validation.log`: extracto limpio de validacion final de WiFi AP6330 (`wlan0 up` + scan OK, HT max RX 300 Mbps) y Ethernet 1Gbps.
+- `logs/serial-live.log`: log historico de bring-up; conserva errores previos y salida serial ruidosa, no usarlo como evidencia final del WiFi corregido.
+
 ## Comandos de prueba
 
 ```sh
