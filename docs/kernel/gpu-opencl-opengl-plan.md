@@ -1,6 +1,6 @@
 # Acto 2 - GPU, OpenGL y OpenCL en Cubieboard4 A80
 
-Fecha: 2026-05-23 (actualizado con hallazgos manual v1.3.1)
+Fecha: 2026-05-23 (v3: hallazgos vendor images + arquitectura driver DRM)
 
 ## Objetivo
 
@@ -69,55 +69,109 @@ NOTA: La wiki linux-sunxi.org marca Display(DRM) como "NO" para A80 en su tabla
 Mainlining Effort, pero esto es informacion desactualizada. El soporte existe
 en mainline.
 
-### HDMI -- Arquitectura A80 documentada (no compatible con sun4i-hdmi)
+### HDMI -- Arquitectura A80 documentada (compatibilidad pendiente)
 
 El DTS `sun9i-a80.dtsi` **no contiene nodo HDMI**. No hay `hdmi-connector`,
 `hdmi-phy` ni `allwinner,sun9i-a80-hdmi` declarados.
 
-**Hallazgo clave del manual v1.3.1**: El HDMI del A80 NO usa un controller HDMI
-separado como el A31 (sun6i-hdmi). En cambio:
+**Hallazgo clave del manual v1.3.1**: el A80 documenta HDMI como parte del
+subsystem display/TCON1, pero el manual disponible no incluye un capitulo de
+registros HDMI equivalente a A10/A20/A31. Por ahora no hay evidencia suficiente
+para declarar compatibilidad directa con `sun4i-hdmi`, `sun6i-hdmi` o
+`dw-hdmi`.
 
-- TCON1 (denominado "LCD1" en la tabla de interrupciones, SPI 119) genera
-  timing HDTV directamente
-- El HDMI PHY es un bloque analógico integrado en el SoC con un solo par
-  diferencial de salida: `HTX0N/HTX0P`
+- TCON1 (denominado "LCD1" en la tabla de interrupciones, fuente GIC 119)
+  genera timing HDTV directamente
+- La salida fisica HDMI esta integrada en el SoC:
+  - `HTX0P/N`, `HTX1P/N`, `HTX2P/N`: tres pares TMDS de datos
+  - `HTXCP/N`: par TMDS de clock
 - Pines de control dedicados (no GPIO-muxed para TX, sí para DDC/CEC):
-  - `HTX0N/HTX0P`: un par diferencial de salida TMDS (fijo, no pinmux)
   - `HHPD`: Hot Plug Detect
   - `HSCL/HSDA` (GPIO PH19/PH20): DDC I2C
   - `HCEC` (GPIO PH21): CEC
   - Alimentación: `VCC18-HDMI` (1.8V) + `VDD09-HDMI` (0.9V)
-- El HDMI tiene SPI propio (120) en el GIC
+- El HDMI tiene fuente GIC propia (120; `GIC_SPI 88` en Device Tree)
 - Aparece listado junto con display en VDD_SYS_PWROFF_GATING_REG bit 12
 
-**El driver sun4i-hdmi no es compatible**. El PHY del A80 es mucho más simple
-que el controller completo que tienen A10/A20/A31. Requiere un driver nuevo
-que maneje TCON1 + PHY integrado.
+**Riesgo principal**: el DTS mainline no declara el bloque HDMI y no hay binding
+existente para `allwinner,sun9i-a80-hdmi`. Antes de escribir un nodo o driver
+hay que comparar el driver vendor `drivers/video/sunxi/hdmi/` contra
+`sun4i-hdmi`/`sun6i-hdmi` y contra los registros expuestos por el manual.
 
 Referencia: `docs/A80_Datasheet_GPIO_Pins.txt` (pines PH19-PH21),
 `docs/A80_Manual_Display.txt` (TCON1 para HDTV).
 
 ### PowerVR G6230 en drm/imagination -- No soportado
 
-El driver `drm/imagination` (merged en mainline) y el driver Vulkan PVR en Mesa
-soportan estas GPUs:
+El driver `drm/imagination` (kernel mainline desde 6.8) y el driver Vulkan PVR
+en Mesa soportan estas GPUs (Mayo 2026):
 
-| GPU | Serie | Driver Kernel | Mesa Vulkan | Estado |
-|-----|-------|--------------|-------------|--------|
-| AXE-1-16M | A-Series | Completo | Vulkan 1.2 | Activo |
-| BXS-4-64 | B-Series | Completo | Vulkan 1.2 | Activo |
-| BXM-4-64 | B-Series | Completo | Vulkan 1.2 | Activo |
-| GX6250 | 6XT | Parcial | Parcial | Inactivo |
-| **G6230** | **Series6** | **No** | **No** | **No listado** |
+| GPU | Serie | BVNC | Driver Kernel | Mesa Vulkan | Firmware público |
+|-----|-------|------|--------------|-------------|-----------------|
+| AXE-1-16M | A-Series | 33.15.11.3 | Completo (6.8+) | Vulkan 1.2 | `rogue_33.15.11.3_v1.fw` |
+| BXS-4-64 | B-Series | 36.53.104.796 | Completo (6.16+) | Vulkan 1.2 | `rogue_36.53.104.796_v1.fw` |
+| BXM-4-64 | B-Series | 36.52.104.182 | Completo (6.18+) | Vulkan 1.2 | `rogue_36.52.104.182_v1.fw` |
+| GX6250 | 6XT | 4.40.2.51 | Parcial (parches Google 2024) | Parcial (inactivo) | `rogue_4.40.2.51_v1.fw` |
+| **G6230** | **Series6** | **1.75.2.30** | **No** | **No** | **No existe** |
 
-**G6230 es Series 6, NO Series 6XT.** El driver abierto se enfoca en GPUs
-mas nuevas. GX6250 (la GPU 6XT mas cercana) tiene diferencias de BVNC que
-requieren firmware distinto y device info especifico.
+**G6230 es Series6 base, NO Series6XT.** La diferencia entre Series6 y Series6XT
+es significativa: Imagination reporta que Series6XT es hasta 50% mas rapido
+clock-for-clock cluster-for-cluster (Jul 2014). El driver abierto fue escrito
+desde cero para GPUs Rogue modernas (Series6XT/A/B), no para Series6 clasico.
 
-Incluso para GX6250, diferentes revisiones (p.ej. BVNC 4.45.2.58 vs 4.40.2.51)
-no comparten firmware y el soporte es parcial. El blog de Imagination (Mar 2026)
-confirma Zink + Mesa 26.1 funcional, pero solo para GPUs soportadas por el
-driver Vulkan.
+**GX6250 -- el caso mas cercano pero aun lejano:**
+- Google (Chen-Yu Tsai, May 2024) parcheo soporte para GX6250 en MT8173
+  Chromebooks usando el driver abierto: https://lore.kernel.org/dri-devel/20240530083513.4135052-1-wenst@chromium.org/
+- Imagination proveyo firmware `rogue_4.40.2.51_v1.fw` especificamente para ese
+  esfuerzo -- confirmando que proveen firmware a partners con interes comercial.
+- Sin embargo, el soporte en Mesa para GX6250 esta listado como "parcial, no en
+  desarrollo activo" y en kernel DRM aun no esta upstream (solo parches externos).
+- Diferentes revisiones de GX6250 (p.ej. BVNC 4.45.2.58 vs 4.40.2.51) ni
+  siquiera comparten firmware entre si.
+
+**G6230 ni siquiera aparece como "unsupported" en Mesa.** La tabla oficial de
+Mesa PowerVR lista 9 GPUs como "unsupported, not under active development"
+(G6110, GX6250 varias revisiones, GX6650, GE7800, GE8300, BXE-2-32, BXE-4-32).
+G6230 no esta en ninguna categoria -- ni activa, ni parcial, ni unsupported.
+
+### Arquitectura del driver DRM -- Que cambiaria para agregar G6230
+
+Un analisis profundo del driver `drm/imagination` revela que **el kernel NO
+necesita una arquitectura nueva**. El driver usa un sistema runtime BVNC:
+las features/quirks/enhancements vienen del firmware en tiempo de arranque,
+no estan hardcodeadas. El driver ya tiene soporte para los 3 tipos de
+procesador firmware (META, MIPS, RISC-V). G6230 usaria META, que ya existe.
+
+**Cambios necesarios en el kernel** (`drivers/gpu/drm/imagination/`):
+
+| Archivo | Cambio | Lineas |
+|---------|--------|--------|
+| `pvr_device.c` | Agregar `PVR_PACKED_BVNC(1, 75, 2, 30)` a `pvr_gpu_support_level()` | +1 |
+| `pvr_drv.c` | Agregar `MODULE_FIRMWARE("powervr/rogue_1.75.2.30_v1.fw")` | +1 |
+| `sun9i-a80-cubieboard4.dts` | Agregar nodo GPU con compatible `"img,img-rogue"` | ~30 |
+
+El compatible generico `"img,img-rogue"` ya existe en `dt_match[]` y matchearia
+cualquier GPU Rogue. No se necesita Kconfig, Makefile, ni archivos nuevos.
+El kernel driver fue diseñado para ser BVNC-agnostico.
+
+**Cambios en Mesa** (`src/imagination/`):
+
+| Archivo | Cambio |
+|---------|--------|
+| `common/device_info/g6230.h` | **NUEVO** -- tabla features/quirks/enhancements (~200 lineas) |
+| `common/device_info/pvr_device_info.c` | Agregar case para BVNC 1.75.2.30 |
+| `vulkan/pvr_arch_rogue6.c` | **POSIBLE** -- si Series6 requiere code paths distintos a Series6XT |
+
+Mesa tiene un sistema de compilacion multi-arquitectura (`pvr_arch_*.c`)
+que compila ciertos archivos una vez por GPU family. Series6 (Rogue clasico)
+vs Series6XT (Rogue XE) vs A-Series vs B-Series cada una puede necesitar
+archivos distintos si los registros o secuencias de init difieren.
+
+**El unico blocker real es el firmware**: debe ser compilado por Imagination
+especificamente para BVNC 1.75.2.30, con el flag `PVR_FW_FLAGS_OPEN_SOURCE`
+y la interfaz FWIF moderna. Sin eso, el driver rechaza la GPU en tiempo de
+probe con "Unsupported BVNC". El firmware viejo del vendor (kernel 3.4) usa
+la interfaz vieja `pvrsrvkm` y es incompatible.
 
 ### BVNC de G6230 -- Confirmado: 1.75.2.30
 
@@ -135,37 +189,60 @@ Esto significa:
 - **Config**: 30
 
 Este BVNC **no esta listado** en el driver `drm/imagination` ni en Mesa PVR.
-El firmware de Imagination disponible actualmente es para BVNCs como
-4.40.2.51 (GX6250) o 36.53.104.796 (BXS-4-64). El BVNC 1.75.2.30 no tiene
-firmware publico ni soporte en el driver abierto.
+El firmware de Imagination disponible actualmente en `linux-firmware.git` es:
+
+| Firmware | BVNC | GPU | Tamaño |
+|----------|------|-----|--------|
+| `rogue_33.15.11.3_v1.fw` | 33.15.11.3 | AXE-1-16M | 112 KB |
+| `rogue_36.53.104.796_v1.fw` | 36.53.104.796 | BXS-4-64 | 155 KB |
+| `rogue_4.40.2.51_v1.fw` | 4.40.2.51 | GX6250 | ~? |
+| `rogue_36.52.104.182_v1.fw` | 36.52.104.182 | BXM-4-64 | ~? |
+| **`rogue_1.75.2.30_v1.fw`** | **1.75.2.30** | **G6230** | **No existe** |
+
+El BVNC 1.75.2.30 no tiene firmware publico ni soporte en el driver abierto.
 
 Se necesitaria contacto directo con Imagination para solicitar:
 1. Firmware compatible con BVNC 1.75.2.30
 2. Device info struct para kernel driver + Mesa
 3. Confirmacion de que el driver soporta revision tan temprana de Rogue
 
-### Tabla GIC (interrupciones) completa -- SPI de display/GPU/HDMI
+El precedente de GX6250 demuestra que Imagination provee firmware cuando hay un
+partner con interes comercial detras (Google/Chromebook). Para A80 no existe
+tal interes actualmente.
 
-Extraída del manual A80 v1.3.1 sección 3.13 (páginas 236-240). Los SPIs Linux
-se calculan como `SPI + 32` (16 SGI + 16 PPI):
+### Tabla GIC (interrupciones) completa -- display/GPU/HDMI
 
-| SPI | Módulo | IRQ Linux | SPI | Módulo | IRQ Linux |
-|-----|--------|-----------|-----|--------|-----------|
-| 118 | LCD-0 (TCON0) | 150 | 125 | DE_FE0 | 157 |
-| 119 | LCD-1 (TCON1) | 151 | 126 | DE_FE1 | 158 |
-| **120** | **HDMI** | **152** | 127 | DE_BE0 | 159 |
-| 121 | MIPI DSI | 153 | 128 | DE_BE1 | 160 |
-| 123 | DRC 0/1 | 155 | **129** | **GPU** | **161** |
-| 124 | DEU 0/1 | 156 | **130** | **GPU PWR** | **162** |
-| **148** | **DE_BE2** | **180** | **149** | **DE_FE2** | **181** |
-| 150 | eDP | 182 | | | |
+Extraída del manual A80 v1.3.1 sección 3.13 (páginas 236-240). El manual lista
+el numero de fuente GIC absoluto, incluyendo SGI/PPI. En Device Tree, el macro
+`GIC_SPI` usa numeracion relativa al primer SPI; por eso:
+
+```text
+GIC_SPI en DTS = fuente_manual - 32
+IRQ Linux normalmente visible = fuente_manual
+```
+
+| Fuente manual | GIC_SPI DTS | Módulo | Fuente manual | GIC_SPI DTS | Módulo |
+|---------------|--------------|--------|---------------|--------------|--------|
+| 118 | 86 | LCD-0 (TCON0) | 125 | 93 | DE_FE0 |
+| 119 | 87 | LCD-1 (TCON1) | 126 | 94 | DE_FE1 |
+| **120** | **88** | **HDMI** | 127 | 95 | DE_BE0 |
+| 121 | 89 | MIPI DSI | 128 | 96 | DE_BE1 |
+| 123 | 91 | DRC 0/1 | **129** | **97** | **GPU** |
+| 124 | 92 | DEU 0/1 | **130** | **98** | **GPU PWR** |
+| **148** | **116** | **DE_BE2** | **159** | **127** | **DE_FE2** |
+| 150 | 118 | eDP | | | |
 
 Notas:
-- HDMI tiene **interrupción SPI propia** (120/IRQ 152), confirmando que el
+- El DTS mainline confirma el criterio: LCD-0 fuente 118 aparece como
+  `interrupts = <GIC_SPI 86 IRQ_TYPE_LEVEL_HIGH>`.
+- HDMI tiene **fuente GIC propia** (120 / `GIC_SPI 88`), confirmando que el
   bloque HDMI tiene lógica de control más allá de TCON1.
-- GPU tiene **dos** interrupciones: GPU (129/161) + GPU PWR (130/162).
-- Tercer pipe display confirmado: DE_FE2 (149/181) + DE_BE2 (148/180).
-- eDP (150/182) presente en el SoC pero no declarado en DTS.
+- GPU tiene **dos** fuentes: GPU (129 / `GIC_SPI 97`) + GPU PWR
+  (130 / `GIC_SPI 98`).
+- Tercer pipe display confirmado por tabla y memory map: DE_BE2 y DE_FE2. La
+  tabla extraida por OCR marca `DE_FE2` como fuente 159; verificar visualmente
+  en el PDF antes de convertirlo en DTS porque podria ser error de OCR.
+- eDP (150 / `GIC_SPI 118`) presente en el SoC pero no declarado en DTS.
 - TCON2 no aparece en esta tabla (solo TCON0=LCD-0, TCON1=LCD-1).
 
 Fuente: `docs/A80_Manual_GIC_SPI_Table.txt`
@@ -187,8 +264,8 @@ describe el módulo `GCM` (GPU Control Module) en **0x01C08000**:
 
 "Rascal" y "Dust" son los nombres internos de los dos clusters de shaders del
 G6230 (dual-cluster, 64 cores). El GCM maneja power gating y BIST test.
-Interrupción `GPU PWR` (SPI 130) proviene de este módulo cuando hay power
-events.
+Interrupción `GPU PWR` (fuente GIC 130 / `GIC_SPI 98`) proviene de este módulo
+cuando hay power events.
 
 El power domain del GPU se controla desde R_PRCM (0x08001400 offset 0x0118):
 `GPU_PWROFF_GATING_REG`, un solo bit. Secuencia recomendada: set bit 0 a 1
@@ -339,17 +416,48 @@ Leon Anavi (Dic 2024) demostro boot mainline en Merrii A80 Optimus:
 
 Referencia: https://anavi.org/article/291/
 
+### Imágenes vendor -- Inventario de blobs PowerVR
+
+Analisis de las imágenes disponibles en `images/`:
+
+| Imagen | Contenido PowerVR detectado |
+|--------|---------------------------|
+| `linaro-desktop-cb4-emmc-hdmi-v1.1.img` | `pvr_dri.so`, `libEGL.so`, `libGLESv1_CM.so`, `libGLESv2.so`, `gl_renderer_string: "PowerVR Rogue G6230"`. Menos completa, sin kernel modules. |
+| `android4.4-cb4-emmc-v4.3.20170717.img` | `/system/modules/pvrsrvkm.ko`, `/system/vendor/lib/egl/libGLESv1_CM_POWERVR_ROGUE.so`, `/system/vendor/lib/egl/libGLESv2_POWERVR_ROGUE.so`, `libPVROCL.so`. Build path: `/work/SDK/a80/lichee/linux-3.4/modules/rogue_km/`. |
+
+**Conclusion**: los blobs existen en la imagen Android (kernel module 3.4 +
+userspace GLES/OpenCL), pero son **incompatibles con mainline**. El kernel
+module `pvrsrvkm.ko` usa APIs de kernel 3.4. Las librerias userspace solo
+funcionan con el DDK exacto. El firmware embebido usa interfaz pvrsrvkm
+antigua, no la FWIF moderna que requiere `drm/imagination`.
+
+**Utilidad potencial**: los blobs sirven para RE (reverse engineering) de
+registros y estructura del firmware, pero no para alimentar al driver abierto.
+
 ### Resumen de soporte upstream
 
 - Mesa documenta un driver PowerVR abierto orientado a Vulkan para GPUs Rogue.
 - El soporte activo actual esta centrado en GPUs Imagination mas nuevas o
-  concretas como AXE/BXM/BXS.
-- Mesa lista GX6250 como soporte parcial, pero G6230 no aparece como objetivo
-  activo documentado.
+  concretas como AXE/BXM/BXS (A-Series y B-Series).
+- **GX6250** (Series6XT): soporte parcial en Mesa Vulkan, Google parcheo en
+  2024 para Chromebooks MT8173, Imagination proveyo firmware. No upstream en
+  DRM kernel aun. Sirve como precedente de que se puede lograr con presion
+  comercial.
+- **G6230** (Series6 base): completamente ausente de todas las listas -- ni
+  activo, ni parcial, ni siquiera "unsupported". BVNC 1.75.2.30 sin firmware
+  publico.
+- **Diferencia Series6 vs Series6XT**: significativa. Series6XT es hasta 50%
+  mas rapido clock-for-clock. El driver abierto se diseno para Series6XT en
+  adelante. Agregar Series6 requeriria cambios en la capa de arquitectura
+  (`pvr_arch_*.c`) en Mesa, pero NO en el kernel (el kernel es BVNC-agnostico:
+  features/quirks vienen del firmware en runtime).
 - Imagination indica que el driver abierto puede correr OpenGL/OpenGL ES via
   Zink, pero eso presupone tener Vulkan funcionando.
 - OpenCL no queda cubierto por ese camino; para G6230 lo mas realista es buscar
   blobs vendor.
+- Imagination (pagina oficial, Mar 2026): "additional GPUs becoming available in
+  later Linux kernel releases" -- pero su roadmap es para IP moderna (BXS, BXM,
+  AXE), no Series6 clasico.
 - **Display/KMS mainline**: confirmado funcional para VGA. HDMI requiere driver
   nuevo (no compatible con sun4i-hdmi existente).
 - **GPU Control Module (GCM)** documentado en manual (0x01C08000): power gating
@@ -360,27 +468,45 @@ Referencia: https://anavi.org/article/291/
 
 Conclusion de factibilidad:
 
-- **OpenGL acelerado mainline**: incierto/bajo, salvo que aparezca soporte PVR
-  compatible con G6230 y firmware usable.
-- **OpenCL mainline**: muy improbable por ahora.
-- **OpenGL ES/OpenCL con blobs vendor**: posible en teoria, pero probablemente
-  atado a kernel/vendor stack viejo (`linux-3.4`, Android o Linaro 2015).
+- **OpenGL acelerado mainline**: muy bajo. G6230 no tiene firmware, ni device
+  info, ni soporte en driver. Solo viable si Imagination lo adopta como
+  objetivo de driver abierto -- improbabe sin partner comercial. El kernel
+  driver necesitaria ~5 lineas de cambio. El blocker es el firmware.
+- **OpenCL mainline**: esencialmente imposible. Vendor excluyo OpenCL del build,
+  driver abierto solo cubre Vulkan, no hay implementacion OpenCL en pipeline.
+- **OpenGL ES/OpenCL con blobs vendor**: confirmados en imagen Android (kernel
+  3.4 + libGLES_POWERVR_ROGUE + libPVROCL), pero atados al stack vendor viejo.
+  Incompatibles con kernel 6.x y mainline.
 - **Display/KMS mainline**: es el primer objetivo practico y medible (VGA
   funcional, HDMI requiere driver nuevo).
 - **G2D acceleration**: posible via Mixer Processor incluso sin GPU 3D.
+- **Camino mas pragmatico para 3D**: display mainline + Mesa software
+  rendering (llvmpipe) para GUI basica, sin aceleracion 3D.
 
 ## Plan recomendado
 
-Antes de implementar, juntar evidencia. El objetivo inicial es contestar:
+Antes de implementar, juntar evidencia. Estado de las preguntas (Mayo 2026):
 
-- Si el display engine Allwinner puede entregar VGA con el kernel actual (HDMI
-  requiere investigar/nodear primero).
-- Si existe un nodo/driver viable para PowerVR G6230 en el kernel actual
-  (driver abierto: no; driver vendor: requiere port desde kernel 3.4).
-- Si las imagenes vendor traen blobs PowerVR utiles y para que version de
-  kernel/userspace fueron hechos.
-- Si OpenGL/OpenGL ES/OpenCL requieren volver a un stack legacy.
-- Cual es el BVNC de G6230, para evaluar viabilidad de driver abierto.
+- **Display VGA mainline**: soportado en DTS actual (tcon0 + vga-dac + vga-connector).
+  Pendiente probar en hardware real.
+- **HDMI mainline**: no hay nodo ni driver. Manual A80 confirma HDMI integrado
+  con fuente GIC propia, pero sin registros PHY documentados. Driver nuevo
+  necesario.
+- **GPU PowerVR driver mainline**: NO. G6230 no tiene firmware, device info, ni
+  soporte en drm/imagination. BVNC 1.75.2.30 no existe en linux-firmware.git.
+- **GPU PowerVR vendor**: modulo `pvrsrvkm.ko` para kernel 3.4. Port a 6.x inviable
+  (API/ABI incompatibles, OpenCL excluido).
+- **Blobs vendor**: **localizados en imagen Android** (`android4.4-cb4-emmc-v4.3.20170717.img`).
+  Contiene `pvrsrvkm.ko`, `libGLESv1_CM_POWERVR_ROGUE.so`, `libGLESv2_POWERVR_ROGUE.so`,
+  `libPVROCL.so`. Todos dependientes del DDK vendor y kernel 3.4. No compatibles
+  con mainline.
+- **OpenGL/OpenGL ES/OpenCL acelerado**: solo factible via stack vendor legacy
+  (kernel 3.4). No hay camino mainline viable para G6230. OpenCL fue excluido
+  explicitamente en el build vendor.
+- **G2D Mixer Processor**: documentado en manual (0x03F00000), acelerador 2D
+  util incluso sin GPU 3D. No explorado aun.
+- **Mesa software**: camino mas realista para GUI basica (llvmpipe). No requiere
+  GPU.
 
 ### Fase 1 - Inventario en el sistema actual
 
@@ -437,19 +563,24 @@ logs/YYYY-MM-DD-display-vga.log
 notes/YYYY-MM-DD-display-vga.md
 ```
 
-#### HDMI (investigacion completa -- driver nuevo necesario)
+#### HDMI (investigacion completa -- compatibilidad/driver pendiente)
 
 No hay nodo HDMI en el DTS actual. Investigación del manual v1.3.1 concluye:
 
-**El A80 NO usa un controller HDMI tipo A31.** Tiene:
-- TCON1 genera timing HDTV directamente (sin MAC HDMI separada)
-- PHY analógico integrado con 1 par TMDS (HTX0N/HTX0P) + HPD + DDC (HSCL/HSDA
-  via GPIO PH19/PH20) + CEC (PH21)
-- SPI propio (120/IRQ 152) para el bloque HDMI
+**No esta probado que el A80 sea compatible con el controller HDMI tipo A31.**
+Tiene:
+- TCON1 genera timing HDTV directamente
+- Salida TMDS integrada: `HTX0/1/2` + `HTXC`
+- HPD dedicado (`HHPD`) + DDC (`HSCL/HSDA` via GPIO PH19/PH20) + CEC (PH21)
+- Fuente GIC propia (120 / `GIC_SPI 88`) para el bloque HDMI
 - Sin capítulo dedicado en el manual, sin registros de PHY documentados
 - VDD_SYS power domain (bit de hold en VDD_SYS_PWROFF_GATING_REG)
 
-**Driver sun4i-hdmi NO compatible.** Habría que escribir driver nuevo para:
+Trabajo pendiente antes de afirmar si se puede reutilizar un driver existente:
+comparar el driver vendor `drivers/video/sunxi/hdmi/` con `sun4i-hdmi`,
+`sun6i-hdmi` y `dw-hdmi`. Si no hay compatibilidad razonable, habria que
+escribir driver nuevo para:
+
 1. Mapear registros TCON1 para timing HDMI (pixel rep, sync polarities)
 2. Controlar PHY (posiblemente desde System Control o TCON1 mismo)
 3. DDC via GPIO bit-banging o I2C en PH19/PH20
@@ -481,34 +612,26 @@ Resultado esperado si no hay GPU:
 - Renderer tipo `llvmpipe` o `softpipe`.
 - Sirve para probar que userspace grafico funciona, pero no valida PowerVR.
 
-### Fase 4 - Inventario de blobs vendor PowerVR
+### Fase 4 - Inventario de blobs vendor PowerVR (COMPLETADO)
 
-Objetivo: revisar imagenes vendor/Linaro en busca de kernel modules y librerias
-PowerVR.
+Objetivo cumplido: se extrajeron y analizaron las imagenes vendor.
 
-Buscar en imagenes extraidas:
+**Resultados de la busqueda en `images/`**:
 
-```sh
-find /private/tmp/cb4-analysis -iname '*pvr*' -o -iname '*rogue*' -o -iname '*img*'
-find /private/tmp/cb4-analysis -iname 'libEGL*' -o -iname 'libGLES*' -o -iname 'libOpenCL*'
-find /private/tmp/cb4-analysis -iname 'pvrsrvctl' -o -iname 'pvr*'
-find /private/tmp/cb4-analysis -iname '*.ko' | grep -Ei 'pvr|gpu|rogue|img'
-```
+| Imagen | Archivos PowerVR encontrados | Estado |
+|--------|------------------------------|--------|
+| `android4.4-cb4-emmc-v4.3.20170717.img` | `/system/modules/pvrsrvkm.ko`, `/system/vendor/lib/egl/libGLESv1_CM_POWERVR_ROGUE.so`, `/system/vendor/lib/egl/libGLESv2_POWERVR_ROGUE.so`, `libPVROCL.so` | Blobs confirmados, imagen formato Allwinner (no ext4 directo), extraccion requiere parser de formato propietario |
+| `linaro-desktop-cb4-emmc-hdmi-v1.1.img` | `pvr_dri.so`, `libEGL.so`, `libGLESv1_CM.so`, `libGLESv2.so` | Solo userspace DRI/GLES, sin kernel module ni firmware |
+| `cb4-debian-server-hdmi-card-v1.0.img.7z` | No analizado | Similar a Linaro |
+| `cb4-debian-server-hdmi-emmc-v1.0.img.7z` | No analizado | Similar a Linaro |
 
-Archivos a identificar:
+El kernel module `pvrsrvkm.ko` fue compilado para kernel 3.4 (ruta de build:
+`/work/SDK/a80/lichee/linux-3.4/modules/rogue_km/`). Las librerias userspace
+usan naming especifico del DDK vendor (`libGLESv1_CM_POWERVR_ROGUE.so`).
 
-- Kernel module PowerVR (`pvrsrvkm.ko` u otro nombre similar).
-- Firmware PowerVR, si existe separado.
-- `libEGL.so`, `libGLESv1_CM.so`, `libGLESv2.so`.
-- `libOpenCL.so`.
-- Utilidades `pvrsrvctl`, `pvrdebug`, `eglinfo`, demos o tests.
-
-Riesgo principal:
-
-- Si el modulo PowerVR vendor fue compilado para kernel 3.4, no va a cargar en
-  kernel 6.1 sin port pesado.
-- Las librerias userspace PowerVR suelen depender estrictamente del kernel
-  module correspondiente.
+**Riesgo confirmado**: todos los blobs vendor dependen del kernel 3.4 y DDK
+exacto. No cargan en kernel 6.x. El firmware embebido en `pvrsrvkm.ko` usa
+interfaz pvrsrvkm antigua, incompatible con `drm/imagination`.
 
 ### Fase 5 - Decidir ruta
 
@@ -566,6 +689,20 @@ notes/2026-05-22-gpu-display-inventory.md
   https://linux-sunxi.org/A80
 - linux-sunxi PowerVR:
   https://linux-sunxi.org/PowerVR
+- Mesa PowerVR hardware support table (BVNCs activos/parciales/unsupported):
+  https://docs.mesa3d.org/drivers/powervr.html
+- Imagination Open Source Driver (Mar 2026, GPUs soportadas):
+  https://developer.imaginationtech.com/solutions/open-source-gpu-driver/
+- Phoronix - Google GX6250 enablement (May 2024):
+  https://www.phoronix.com/news/PowerVR-GX6250-MT8173
+- Phoronix - PowerVR firmware BXS-4-64 (May 2025):
+  https://www.phoronix.com/news/PVR-BXS-4-64-Firmware
+- Phoronix - PowerVR firmware AXE-1-16M inicial (Nov 2023):
+  https://www.phoronix.com/news/PowerVR-Firmware-Blob
+- Phoronix - PowerVR DRM driver RISC-V + BXM-4-64 (Sep 2025):
+  https://www.phoronix.com/news/Linux-6.18-PowerVR-RISC-V
+- Imagination - Series6 vs Series6XT performance difference (Jul 2014):
+  https://www.chipestimate.com/A-guide-to-the-new-PowerVR-Rogue-GPUs/Imagination-Technologies/Technical-Article/2014/07/01
 - linux-sunxi Mainlining Effort (tabla display A80):
   https://linux-sunxi.org/Mainlining_Effort
 - Parches display A80 mainline -- Chen-Yu Tsai (2018):
