@@ -35,48 +35,74 @@ La evidencia detallada esta en
 No se versionan imagenes completas, dumps ni firmwares vendor por tamano y
 licenciamiento. Para reproducir la microSD se necesitan artefactos externos.
 
+## Base recomendada por Johan
+
+Johan mantiene builds vanilla Debian/Ubuntu para Cubieboard4:
+
+```text
+https://sd-card-images.johang.se/boards/cubieboard4.html
+```
+
+Links directos recomendados al 2026-05-24:
+
+```sh
+curl -O https://dl.sd-card-images.johang.se/boots/2026-05-01/boot-cubieboard4.bin.gz
+curl -O https://dl.sd-card-images.johang.se/debians/2026-05-18/debian-bookworm-armhf-ja3iex.bin.gz
+```
+
+El servidor de Johan rota builds viejas; si esos links vencen, usar la pagina
+de Cubieboard4 para elegir el boot image y Debian Bookworm mas recientes.
+
+La imagen Debian usa como password de `root` el sufijo del nombre de archivo.
+Para `debian-bookworm-armhf-ja3iex.bin.gz`, el password es:
+
+```text
+ja3iex
+```
+
 ## Artefactos necesarios
 
-Colocar estos archivos en un directorio de trabajo, por ejemplo
-`/private/tmp/cb4-bookworm/`:
+Para reproducir la imagen con los fixes de este repo se necesitan:
 
-| Archivo | Uso |
-|---|---|
-| `boot-cubieboard4.bin` | Imagen base de boot/U-Boot para Cubieboard4 |
-| `debian-bookworm-armhf-vim3ve.bin` | Rootfs Debian 12 armhf probado |
-| `dtb/sun9i-a80-cubieboard4.dtb` | DTB final de este repo |
-| `fw_bcm40183b2_ag.bin` | Firmware WiFi AP6330 extraido de imagen vendor |
-| `nvram_ap6330.txt` | NVRAM WiFi AP6330 extraido de imagen vendor |
+| Archivo | Origen | Uso |
+|---|---|---|
+| `boot-cubieboard4.bin.gz` | Johan | Boot/U-Boot base para Cubieboard4 |
+| `debian-bookworm-armhf-ja3iex.bin.gz` | Johan | Rootfs Debian 12 armhf |
+| `dtb/sun9i-a80-cubieboard4.dtb` | Este repo | DTB final validado |
+| `fw_bcm40183b2_ag.bin` | Imagen vendor/Linaro | Firmware WiFi AP6330 |
+| `nvram_ap6330.txt` | Imagen vendor/Linaro | NVRAM WiFi AP6330 |
 
-Los nombres originales usados durante la investigacion fueron:
+Los nombres usados durante la validacion original fueron:
 
 - `images/boot-cubieboard4.bin.gz`
 - `images/debian-bookworm-armhf-vim3ve.bin.gz`
 - `android4.4-cb4-emmc-v4.3.20170717.img.7z` o una imagen vendor/Linaro con
   `lib/firmware/ap6330/`
 
-Pendiente del repo: publicar enlaces/hashes exactos de descarga para esos
-artefactos. Mientras tanto, ver
+La validacion documentada en `logs/` se hizo con una build anterior de Johan
+(`vim3ve`). El flujo es el mismo para la build `ja3iex`; si se usa una build
+nueva, registrar fecha y hashes.
+
+Pendiente del repo: publicar link MEGA y hashes exactos de las imagenes vendor
+usadas para extraer el firmware AP6330. Mientras tanto, ver
 [notes/2026-05-21-inspeccion-imagenes-vendor.md](notes/2026-05-21-inspeccion-imagenes-vendor.md)
 y [docs/referencias-a80.md](docs/referencias-a80.md).
 
 ## Crear la imagen microSD
 
-Ejemplo en macOS. Ajustar rutas segun donde esten los artefactos:
+Ejemplo en macOS/Linux:
 
 ```sh
 mkdir -p /private/tmp/cb4-bookworm
 cd /private/tmp/cb4-bookworm
 
-cp /ruta/a/boot-cubieboard4.bin.gz .
-cp /ruta/a/debian-bookworm-armhf-vim3ve.bin.gz .
-gzip -dk boot-cubieboard4.bin.gz
-gzip -dk debian-bookworm-armhf-vim3ve.bin.gz
+curl -O https://dl.sd-card-images.johang.se/boots/2026-05-01/boot-cubieboard4.bin.gz
+curl -O https://dl.sd-card-images.johang.se/debians/2026-05-18/debian-bookworm-armhf-ja3iex.bin.gz
 
-cp boot-cubieboard4.bin cubieboard4-bookworm-test.img
-dd if=debian-bookworm-armhf-vim3ve.bin \
-  of=cubieboard4-bookworm-test.img \
-  bs=1m seek=32 conv=notrunc status=progress
+shasum -a 256 boot-cubieboard4.bin.gz debian-bookworm-armhf-ja3iex.bin.gz
+
+zcat boot-cubieboard4.bin.gz debian-bookworm-armhf-ja3iex.bin.gz \
+  > cubieboard4-bookworm-test.img
 ```
 
 La imagen resultante debe tener:

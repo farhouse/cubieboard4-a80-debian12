@@ -21,4 +21,12 @@ Nombres mencionados por la investigacion actual:
 - `cb4-debian-server-hdmi-card-v1.0.img.7z`
 - `cb4-debian-server-hdmi-emmc-v1.0.img.7z`
 - `debian-bookworm-armhf-vim3ve.bin.gz`
+- `debian-bookworm-armhf-ja3iex.bin.gz`
 - `boot-cubieboard4.bin.gz`
+
+Builds actuales de Johan:
+
+```sh
+curl -O https://dl.sd-card-images.johang.se/boots/2026-05-01/boot-cubieboard4.bin.gz
+curl -O https://dl.sd-card-images.johang.se/debians/2026-05-18/debian-bookworm-armhf-ja3iex.bin.gz
+```

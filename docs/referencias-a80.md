@@ -17,6 +17,12 @@ persona pueda repetir la investigacion.
 
 ## Fuentes vendor y upstream
 
+- Johan Ahlberg SD card images para Cubieboard4:
+  `https://sd-card-images.johang.se/boards/cubieboard4.html`
+- Boot image Cubieboard4 usado como base actual:
+  `https://dl.sd-card-images.johang.se/boots/2026-05-01/boot-cubieboard4.bin.gz`
+- Debian Bookworm armhf usado como base actual:
+  `https://dl.sd-card-images.johang.se/debians/2026-05-18/debian-bookworm-armhf-ja3iex.bin.gz`
 - Kernel vendor Cubieboard CC-A80:
   `https://github.com/cubieboard/CC-A80-kernel-source`
 - SDK A80 browseable:
