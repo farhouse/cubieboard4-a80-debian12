@@ -1,0 +1,25 @@
+.DS_Store
+
+# Local source trees used only as references during investigation.
+/u-boot/
+/linux/
+/kernel/
+/CC-A80-kernel-source/
+
+# Vendor and test images are large and may have separate licensing terms.
+/images/*
+!/images/.gitkeep
+!/images/README.md
+
+# Keep generated/extracted vendor manuals out of git; link upstream instead.
+/docs/A80_*.pdf
+/docs/A80_Manual_*.txt
+/docs/A80_Datasheet_*.txt
+/docs/A80_User_Manual_*.txt
+
+# Serial/live captures and local scratch output.
+/logs/serial-live.log
+*.tmp
+*.bak
+*.swp
+*~

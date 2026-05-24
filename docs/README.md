@@ -14,6 +14,7 @@ Carpeta para recopilar información relevante del proyecto de revive de la Cubie
 
 - `estado-validado.md` → resumen consolidado de lo que ya funciona, cambios DTS/firmware aplicados, evidencia y pendientes.
 - `kernel/gpu-opencl-opengl-plan.md` → plan del acto 2 para display, GPU PowerVR, OpenGL y OpenCL.
+- `referencias-a80.md` → enlaces a manuales, datasheets, fuentes vendor/upstream e imagenes usadas como referencia.
 
 ## Sugerencia de organización
 
