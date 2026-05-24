@@ -41,6 +41,9 @@ persona pueda repetir la investigacion.
 Las imagenes se mantienen fuera de git por tamano y por licenciamiento. Los
 nombres se conservan en notas/logs para trazabilidad:
 
+- MEGA mirror:
+  `https://mega.nz/folder/ZtwxCCJC#AIYHcTqz-ucjuzKnE9qD7A/folder/M9ZUTZQA`
+
 - `android4.4-cb4-emmc-v4.3.20170717.img.7z`
 - `linaro-desktop-cb4-emmc-hdmi-v1.1.img.7z`
 - `cb4-debian-server-hdmi-card-v1.0.img.7z`

@@ -34,6 +34,8 @@ La evidencia detallada esta en
 
 No se versionan imagenes completas, dumps ni firmwares vendor por tamano y
 licenciamiento. Para reproducir la microSD se necesitan artefactos externos.
+El inventario de imagenes, mirrors y SHA256 esta en
+[docs/artefactos-externos.md](docs/artefactos-externos.md).
 
 ## Base recomendada por Johan
 
@@ -83,8 +85,10 @@ La validacion documentada en `logs/` se hizo con una build anterior de Johan
 (`vim3ve`). El flujo es el mismo para la build `ja3iex`; si se usa una build
 nueva, registrar fecha y hashes.
 
-Pendiente del repo: publicar link MEGA y hashes exactos de las imagenes vendor
-usadas para extraer el firmware AP6330. Mientras tanto, ver
+El link MEGA y los hashes de las imagenes locales estan documentados. Pendiente:
+subir los artefactos a una GitHub Release si se decide preservarlos tambien
+alli. Ver
+[docs/artefactos-externos.md](docs/artefactos-externos.md),
 [notes/2026-05-21-inspeccion-imagenes-vendor.md](notes/2026-05-21-inspeccion-imagenes-vendor.md)
 y [docs/referencias-a80.md](docs/referencias-a80.md).
 
