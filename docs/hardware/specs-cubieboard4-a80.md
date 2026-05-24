@@ -43,9 +43,9 @@ Para este proyecto conviene priorizar:
 Checklist mínimo en laboratorio:
 - [ ] Confirmar modelo exacto serigrafiado en placa
 - [ ] Confirmar capacidad de RAM visible por sistema
-- [ ] Confirmar eMMC detectada y tamaño real
+- [x] Confirmar eMMC detectada y tamaño real
 - [ ] Confirmar salida serial durante boot
-- [ ] Confirmar boot desde medio seleccionado (eMMC/SD)
+- [ ] Confirmar migracion/boot de Debian 12 desde eMMC
 
 ## Fuentes consultadas (iniciales)
 

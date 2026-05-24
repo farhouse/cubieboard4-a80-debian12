@@ -19,7 +19,7 @@ DTB corregido. Quedaron validados:
 | Ethernet RTL8211E | Funciona | Link Gigabit Full Duplex |
 | USB Type-A | Funciona | Hub interno `05e3:0608`, pendrive probado en los 4 puertos |
 | WiFi AP6330 | Funciona | `wlan0` levanta y escanea redes; BCM4330/4, HT hasta 300 Mbps |
-| eMMC | Detectada | Linux la enumera como eMMC de 7.30 GiB; boot desde eMMC pendiente |
+| eMMC | Detectada | Linux la enumera como eMMC de 7.30 GiB; existe Debian 11 en eMMC, pero Debian 12 de este repo aun no fue validado desde eMMC |
 | Bluetooth AP6330 | Pendiente | Firmware `bcm40183b2.hcd` localizado, falta configurar |
 | HDMI/VGA | Pendiente | No probado todavia |
 
@@ -196,8 +196,10 @@ brcmfmac_sdio_htclk: HT Avail timeout
 ### eMMC en `mmc2`
 
 Segun el FEX vendor, la eMMC corresponde a `mmc2`, 8-bit, pines `PC6-PC16`.
-Queda como almacenamiento interno detectado, pero el boot desde eMMC no esta
-validado.
+Queda como almacenamiento interno detectado. La placa conserva una instalacion
+Debian 11 en eMMC, lo que sugiere que el medio puede bootear con un layout o
+bootloader previo. Lo que no esta validado todavia es migrar o arrancar la
+imagen Debian 12 de este repo desde la eMMC.
 
 Configuracion final:
 
@@ -388,7 +390,7 @@ picocom -b 115200 --databits 8 --parity n --stopbits 1 --flow n /dev/cu.usbseria
 
 1. Bluetooth AP6330: instalar/configurar `bcm40183b2.hcd` y validar UART/GPIOs BT.
 2. Conectividad WiFi completa: instalar `wpasupplicant` o `iwd` y probar asociacion a red.
-3. Boot desde eMMC: validar si puede arrancar de la eMMC interna.
+3. eMMC: preservar la instalacion Debian 11 actual, capturar layout/bootloader y validar migracion o boot de Debian 12 desde eMMC.
 4. HDMI/VGA: probar salida de video.
 5. Capturar un boot log limpio completo con el DTB final, sin payloads de transferencia.
 6. Promover o guardar referencias FEX en `docs/device-tree/` como tabla FEX -> DTS.

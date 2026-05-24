@@ -15,7 +15,7 @@ Validado en hardware real el 2026-05-22:
 | Ethernet | Funciona | RTL8211E, link Gigabit Full Duplex |
 | USB Type-A | Funciona | Hub interno `05e3:0608`; pendrive probado en los 4 puertos |
 | WiFi AP6330 | Funciona | `wlan0` levanta y escanea redes; BCM4330/4 |
-| eMMC | Detectada | Linux la ve como eMMC de 7.30 GiB; boot desde eMMC pendiente |
+| eMMC | Detectada | Linux la ve como eMMC de 7.30 GiB; la placa tiene Debian 11 en eMMC, pero Debian 12 de este repo aun no fue validado desde eMMC |
 | Bluetooth | Pendiente | Falta configurar firmware/UART |
 | VGA/HDMI | Pendiente | No validado todavia |
 | GPU PowerVR G6230 | Sin aceleracion mainline | Falta firmware publico para BVNC `1.75.2.30` |
@@ -263,7 +263,7 @@ Ver el detalle DTS en [docs/estado-validado.md](docs/estado-validado.md).
 
 - Publicar enlaces y hashes exactos de los artefactos externos.
 - Agregar o reconstruir el DTS fuente correspondiente al DTB final.
-- Validar boot desde eMMC.
+- Preservar la eMMC actual con Debian 11 y validar migracion/boot de Debian 12 desde eMMC.
 - Validar VGA/HDMI.
 - Configurar Bluetooth AP6330.
 - Capturar un boot log limpio completo con el DTB final.
