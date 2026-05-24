@@ -152,8 +152,14 @@ require_cmd sha256sum
 require_cmd mkfs.ext4
 require_cmd mount
 require_cmd umount
-require_cmd rsync
 require_cmd mkimage
+require_cmd tar
+
+if command -v rsync >/dev/null 2>&1; then
+	COPY_METHOD="rsync"
+else
+	COPY_METHOD="tar"
+fi
 
 [ -b "$SOURCE_ROOT" ] || die "source root partition not found: $SOURCE_ROOT"
 [ -b "$TARGET_EMMC" ] || die "target eMMC disk not found: $TARGET_EMMC"
@@ -190,6 +196,7 @@ Target rootfs:      $TARGET_ROOT
 Target boot part:   $TARGET_BOOT
 Kernel:             $KERNEL_VERSION
 Backup directory:   $BACKUP_DIR
+Copy method:        $COPY_METHOD
 Mode:               $([ "$DRY_RUN" -eq 1 ] && echo dry-run || echo execute)
 
 This will preserve the raw eMMC bootloader area but will erase and replace:
@@ -238,16 +245,32 @@ trap cleanup EXIT
 
 log
 log "Copying running SD rootfs to eMMC..."
-run rsync -aHAX --numeric-ids \
-	--exclude=/dev/* \
-	--exclude=/proc/* \
-	--exclude=/sys/* \
-	--exclude=/run/* \
-	--exclude=/tmp/* \
-	--exclude=/mnt/* \
-	--exclude=/media/* \
-	--exclude=/lost+found \
-	/ "$MOUNTPOINT/"
+if [ "$COPY_METHOD" = "rsync" ]; then
+	run rsync -aHAX --numeric-ids \
+		--exclude=/dev/* \
+		--exclude=/proc/* \
+		--exclude=/sys/* \
+		--exclude=/run/* \
+		--exclude=/tmp/* \
+		--exclude=/mnt/* \
+		--exclude=/media/* \
+		--exclude=/lost+found \
+		/ "$MOUNTPOINT/"
+else
+	log "+ tar copy / -> $MOUNTPOINT/"
+	if [ "$DRY_RUN" -eq 0 ]; then
+		tar --one-file-system \
+			--exclude=./dev \
+			--exclude=./proc \
+			--exclude=./sys \
+			--exclude=./run \
+			--exclude=./tmp \
+			--exclude=./mnt \
+			--exclude=./media \
+			--exclude=./lost+found \
+			-cpf - -C / . | tar -xpf - -C "$MOUNTPOINT"
+	fi
+fi
 
 log
 log "Writing eMMC boot script..."
