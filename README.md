@@ -270,3 +270,20 @@ Ver el detalle DTS en [docs/estado-validado.md](docs/estado-validado.md).
 - Validar VGA/HDMI.
 - Configurar Bluetooth AP6330.
 - Capturar un boot log limpio completo con el DTB final.
+
+## Script eMMC
+
+Hay un instalador conservador para copiar el sistema SD actual a eMMC:
+
+```sh
+sudo scripts/install-to-emmc.sh --backup-dir /media/usb
+```
+
+Por defecto corre en modo dry-run. Para ejecutar de verdad:
+
+```sh
+sudo scripts/install-to-emmc.sh --backup-dir /media/usb --execute
+```
+
+El script no toca la region raw de bootloader ni `mmcblk1boot0/boot1`; solo
+reemplaza `/dev/mmcblk1p2`. Requiere backup y confirmacion `ERASE-EMMC`.
