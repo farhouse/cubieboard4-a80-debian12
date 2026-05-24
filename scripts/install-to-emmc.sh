@@ -31,6 +31,7 @@ only the root filesystem partition.
 
 Options:
   --backup-dir DIR   Directory where eMMC metadata/backups will be written.
+                     For --execute this must live on a mounted USB drive.
   --execute          Actually format /dev/mmcblk1p2 and install to eMMC.
   --yes              Skip interactive prompt; requires --execute.
   --target DEV       Target eMMC disk, default: /dev/mmcblk1.
@@ -96,6 +97,76 @@ dump_partition_layout() {
 		echo "# blkid"
 		blkid "$disk"* || true
 	} >"$out"
+}
+
+mount_source_for_path() {
+	findmnt -n -o SOURCE -T "$1"
+}
+
+mount_target_for_path() {
+	findmnt -n -o TARGET -T "$1"
+}
+
+disk_for_block_device() {
+	local dev="$1"
+	local name
+	local pkname
+
+	name="$(basename "$dev")"
+	pkname="$(lsblk -n -o PKNAME "$dev" 2>/dev/null | head -n 1 || true)"
+	if [ -n "$pkname" ]; then
+		printf '/dev/%s\n' "$pkname"
+	else
+		printf '/dev/%s\n' "$name"
+	fi
+}
+
+transport_for_block_device() {
+	local dev="$1"
+	local disk
+
+	disk="$(disk_for_block_device "$dev")"
+	lsblk -n -o TRAN "$disk" 2>/dev/null | head -n 1
+}
+
+validate_backup_dir() {
+	local dir="$1"
+	local source
+	local target
+	local transport
+	local available_kb
+	local test_file
+
+	source="$(mount_source_for_path "$dir")"
+	target="$(mount_target_for_path "$dir")"
+	transport=""
+	if [ -b "$source" ]; then
+		transport="$(transport_for_block_device "$source")"
+	fi
+
+	if [ "$DRY_RUN" -eq 1 ]; then
+		log "Backup mount:       ${target:-unknown}"
+		log "Backup source:      ${source:-unknown}"
+		log "Backup transport:   ${transport:-unknown}"
+		return
+	fi
+
+	[ -n "$source" ] || die "cannot determine backup filesystem for: $dir"
+	[ "$target" != "/" ] || die "--backup-dir must be on an external USB drive, not the running root filesystem"
+	[ "$target" != "/tmp" ] || die "--backup-dir must be persistent; /tmp is not acceptable"
+	[ -b "$source" ] || die "--backup-dir is not on a block device: $source"
+	[ "$transport" = "usb" ] || die "--backup-dir must be on a mounted USB drive; got source=$source transport=${transport:-unknown}"
+	[ "$source" != "$SOURCE_ROOT" ] || die "--backup-dir cannot be on the source SD root"
+	[ "$source" != "$TARGET_ROOT" ] || die "--backup-dir cannot be on the target eMMC root"
+
+	available_kb="$(df -Pk "$dir" | awk 'NR == 2 {print $4}')"
+	[ -n "$available_kb" ] || die "cannot determine free space for backup directory"
+	[ "$available_kb" -ge 65536 ] || die "backup directory needs at least 64 MiB free"
+
+	test_file="$dir/.cb4-emmc-backup-write-test"
+	printf 'cb4 backup write test\n' >"$test_file" || die "backup directory write test failed"
+	sync "$test_file" 2>/dev/null || sync
+	rm -f "$test_file"
 }
 
 while [ "$#" -gt 0 ]; do
@@ -173,6 +244,7 @@ CURRENT_ROOT="$(resolve_source)"
 mkdir -p "$BACKUP_DIR"
 [ -d "$BACKUP_DIR" ] || die "backup directory does not exist: $BACKUP_DIR"
 [ -w "$BACKUP_DIR" ] || die "backup directory is not writable: $BACKUP_DIR"
+validate_backup_dir "$BACKUP_DIR"
 
 KERNEL_VERSION="$(uname -r)"
 KERNEL_IMAGE="/boot/vmlinuz-${KERNEL_VERSION}"
