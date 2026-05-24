@@ -15,7 +15,7 @@ Validado en hardware real el 2026-05-22:
 | Ethernet | Funciona | RTL8211E, link Gigabit Full Duplex |
 | USB Type-A | Funciona | Hub interno `05e3:0608`; pendrive probado en los 4 puertos |
 | WiFi AP6330 | Funciona | `wlan0` levanta y escanea redes; BCM4330/4 |
-| eMMC | Detectada | Linux la ve como eMMC de 7.30 GiB; la placa tiene Debian 11 en eMMC, pero Debian 12 de este repo aun no fue validado desde eMMC |
+| eMMC | Detectada | Linux la ve como eMMC de 7.30 GiB; Debian 11 Bullseye confirmado en eMMC, pero Debian 12 de este repo aun no fue validado desde eMMC |
 | Bluetooth | Pendiente | Falta configurar firmware/UART |
 | VGA/HDMI | Pendiente | No validado todavia |
 | GPU PowerVR G6230 | Sin aceleracion mainline | Falta firmware publico para BVNC `1.75.2.30` |
@@ -242,6 +242,9 @@ Resultados esperados:
 
 - SD como `mmcblk0`.
 - eMMC como `mmcblk1`.
+- SD y eMMC pueden compartir `PARTUUID` si vienen del mismo layout; usar
+  `/dev/mmcblk0p2` o regenerar identificadores antes de depender de
+  `root=PARTUUID=...`.
 - Hub USB Genesys Logic `05e3:0608`.
 - `wlan0` presente y capaz de escanear redes.
 - Ethernet con link Gigabit si hay cable conectado.

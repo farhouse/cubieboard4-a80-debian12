@@ -19,7 +19,7 @@ DTB corregido. Quedaron validados:
 | Ethernet RTL8211E | Funciona | Link Gigabit Full Duplex |
 | USB Type-A | Funciona | Hub interno `05e3:0608`, pendrive probado en los 4 puertos |
 | WiFi AP6330 | Funciona | `wlan0` levanta y escanea redes; BCM4330/4, HT hasta 300 Mbps |
-| eMMC | Detectada | Linux la enumera como eMMC de 7.30 GiB; existe Debian 11 en eMMC, pero Debian 12 de este repo aun no fue validado desde eMMC |
+| eMMC | Detectada | Linux la enumera como eMMC de 7.30 GiB; Debian 11 Bullseye confirmado en eMMC; Debian 12 de este repo aun no fue validado desde eMMC |
 | Bluetooth AP6330 | Pendiente | Firmware `bcm40183b2.hcd` localizado, falta configurar |
 | HDMI/VGA | Pendiente | No probado todavia |
 
@@ -197,9 +197,13 @@ brcmfmac_sdio_htclk: HT Avail timeout
 
 Segun el FEX vendor, la eMMC corresponde a `mmc2`, 8-bit, pines `PC6-PC16`.
 Queda como almacenamiento interno detectado. La placa conserva una instalacion
-Debian 11 en eMMC, lo que sugiere que el medio puede bootear con un layout o
-bootloader previo. Lo que no esta validado todavia es migrar o arrancar la
-imagen Debian 12 de este repo desde la eMMC.
+Debian 11 Bullseye en eMMC (`mmcblk1p2`) con kernel `5.10.0-34-armmp` y
+`boot.cmd` orientado a `devnum 1`. Lo que no esta validado todavia es migrar o
+arrancar la imagen Debian 12 de este repo desde la eMMC.
+
+Riesgo observado: SD y eMMC comparten los mismos `PARTUUID` (`800e6fd4-01` y
+`800e6fd4-02`). Evitar `root=PARTUUID=...` mientras ambos medios esten
+presentes, salvo que antes se regeneren identificadores.
 
 Configuracion final:
 
@@ -385,6 +389,7 @@ picocom -b 115200 --databits 8 --parity n --stopbits 1 --flow n /dev/cu.usbseria
 - `notes/2026-05-22-wifi-ap6330.md`: resolucion especifica del WiFi.
 - `notes/2026-05-21-handoff-usb-4puertos.md`: validacion USB 4 puertos.
 - `notes/2026-05-21-inspeccion-imagenes-vendor.md`: referencia FEX/vendor para MMC, USB y AP6330.
+- `notes/2026-05-24-emmc-debian11-inspection.md`: inspeccion read-only de la eMMC Debian 11 y riesgos para migracion.
 
 ## Pendientes
 
