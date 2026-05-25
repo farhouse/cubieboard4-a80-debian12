@@ -43,6 +43,8 @@ nombres se conservan en notas/logs para trazabilidad:
 
 - MEGA mirror:
   `https://mega.nz/folder/ZtwxCCJC#AIYHcTqz-ucjuzKnE9qD7A/folder/M9ZUTZQA`
+- GitHub Release:
+  `https://github.com/farhouse/cubieboard4-a80-debian12/releases/tag/external-images-2026-05`
 
 - `android4.4-cb4-emmc-v4.3.20170717.img.7z`
 - `linaro-desktop-cb4-emmc-hdmi-v1.1.img.7z`

@@ -15,7 +15,7 @@ Validado en hardware real el 2026-05-22:
 | Ethernet | Funciona | RTL8211E, link Gigabit Full Duplex |
 | USB Type-A | Funciona | Hub interno `05e3:0608`; pendrive probado en los 4 puertos |
 | WiFi AP6330 | Funciona | `wlan0` levanta y escanea redes; BCM4330/4 |
-| eMMC | Detectada | Linux la ve como eMMC de 7.30 GiB; Debian 11 Bullseye confirmado en eMMC, pero Debian 12 de este repo aun no fue validado desde eMMC |
+| eMMC | Parcial | Linux la ve como eMMC de 7.30 GiB; Debian 12 se pudo instalar a eMMC, pero U-Boot proper no detecta MMC/eMMC al bootear sin microSD |
 | Bluetooth | Pendiente | Falta configurar firmware/UART |
 | VGA/HDMI | Pendiente | No validado todavia |
 | GPU PowerVR G6230 | Sin aceleracion mainline | Falta firmware publico para BVNC `1.75.2.30` |
@@ -85,9 +85,8 @@ La validacion documentada en `logs/` se hizo con una build anterior de Johan
 (`vim3ve`). El flujo es el mismo para la build `ja3iex`; si se usa una build
 nueva, registrar fecha y hashes.
 
-El link MEGA y los hashes de las imagenes locales estan documentados. Pendiente:
-subir los artefactos a una GitHub Release si se decide preservarlos tambien
-alli. Ver
+El link MEGA, la GitHub Release y los hashes de las imagenes locales estan
+documentados. Ver
 [docs/artefactos-externos.md](docs/artefactos-externos.md),
 [notes/2026-05-21-inspeccion-imagenes-vendor.md](notes/2026-05-21-inspeccion-imagenes-vendor.md)
 y [docs/referencias-a80.md](docs/referencias-a80.md).
@@ -264,9 +263,9 @@ Ver el detalle DTS en [docs/estado-validado.md](docs/estado-validado.md).
 
 ## Pendientes
 
-- Publicar enlaces y hashes exactos de los artefactos externos.
 - Agregar o reconstruir el DTS fuente correspondiente al DTB final.
-- Preservar la eMMC actual con Debian 11 y validar migracion/boot de Debian 12 desde eMMC.
+- Resolver boot desde eMMC: SPL carga U-Boot desde `MMC2`, pero U-Boot proper
+  reporta `MMC: no card present` y no puede leer `/boot` desde eMMC.
 - Validar VGA/HDMI.
 - Configurar Bluetooth AP6330.
 - Capturar un boot log limpio completo con el DTB final.
@@ -287,3 +286,6 @@ sudo scripts/install-to-emmc.sh --backup-dir /media/usb --execute
 
 El script no toca la region raw de bootloader ni `mmcblk1boot0/boot1`; solo
 reemplaza `/dev/mmcblk1p2`. Requiere backup y confirmacion `ERASE-EMMC`.
+En la prueba real del 2026-05-25 la copia a eMMC funciono, pero el boot sin
+microSD quedo bloqueado en U-Boot proper. Ver
+[notes/2026-05-25-emmc-debian12-install-uboot-blocker.md](notes/2026-05-25-emmc-debian12-install-uboot-blocker.md).

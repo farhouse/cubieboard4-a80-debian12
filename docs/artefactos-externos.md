@@ -1,6 +1,6 @@
 # Artefactos externos
 
-Fecha de consolidacion: 2026-05-24
+Fecha de consolidacion: 2026-05-25
 
 Este proyecto evita versionar imagenes completas dentro del historial git. Las
 imagenes se conservan como artefactos externos y se referencian desde la
@@ -10,19 +10,21 @@ documentacion con nombre, tamano, SHA256 y uso.
 
 - MEGA:
   `https://mega.nz/folder/ZtwxCCJC#AIYHcTqz-ucjuzKnE9qD7A/folder/M9ZUTZQA`
+- GitHub Release:
+  `https://github.com/farhouse/cubieboard4-a80-debian12/releases/tag/external-images-2026-05`
 - Johan Ahlberg, Cubieboard4:
   `https://sd-card-images.johang.se/boards/cubieboard4.html`
 
 ## Plan de preservacion
 
-La estrategia recomendada es:
+La estrategia usada es:
 
 1. Mantener git solo para documentacion, DTB, logs, checksums y scripts.
 2. Publicar imagenes como assets de una GitHub Release.
 3. Mantener MEGA como mirror adicional.
 4. Registrar siempre SHA256 para detectar corrupcion o reemplazos accidentales.
 
-Release sugerida:
+Release usada:
 
 ```text
 external-images-2026-05

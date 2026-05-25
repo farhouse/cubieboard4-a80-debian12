@@ -19,7 +19,7 @@ DTB corregido. Quedaron validados:
 | Ethernet RTL8211E | Funciona | Link Gigabit Full Duplex |
 | USB Type-A | Funciona | Hub interno `05e3:0608`, pendrive probado en los 4 puertos |
 | WiFi AP6330 | Funciona | `wlan0` levanta y escanea redes; BCM4330/4, HT hasta 300 Mbps |
-| eMMC | Detectada | Linux la enumera como eMMC de 7.30 GiB; Debian 11 Bullseye confirmado en eMMC; Debian 12 de este repo aun no fue validado desde eMMC |
+| eMMC | Parcial | Linux la enumera como eMMC de 7.30 GiB; Debian 12 se pudo instalar a eMMC; boot sin microSD bloqueado por U-Boot proper (`MMC: no card present`) |
 | Bluetooth AP6330 | Pendiente | Firmware `bcm40183b2.hcd` localizado, falta configurar |
 | HDMI/VGA | Pendiente | No probado todavia |
 
@@ -196,10 +196,40 @@ brcmfmac_sdio_htclk: HT Avail timeout
 ### eMMC en `mmc2`
 
 Segun el FEX vendor, la eMMC corresponde a `mmc2`, 8-bit, pines `PC6-PC16`.
-Queda como almacenamiento interno detectado. La placa conserva una instalacion
-Debian 11 Bullseye en eMMC (`mmcblk1p2`) con kernel `5.10.0-34-armmp` y
-`boot.cmd` orientado a `devnum 1`. Lo que no esta validado todavia es migrar o
-arrancar la imagen Debian 12 de este repo desde la eMMC.
+Queda como almacenamiento interno detectado por Linux.
+
+La eMMC tenia Debian 11 Bullseye (`mmcblk1p2`) con kernel `5.10.0-34-armmp`.
+El 2026-05-25 se ejecuto el instalador `scripts/install-to-emmc.sh` y se copio
+Debian 12 desde la microSD a `/dev/mmcblk1p2`. El rootfs eMMC quedo como ext4
+con label `cb4-rootfs` y UUID:
+
+```text
+19adddd1-13cf-46e4-8985-2d62c853be56
+```
+
+La instalacion a eMMC completo correctamente, incluyendo backup previo en USB,
+`rsync`, generacion de `boot.cmd`/`boot.scr`, `sync` y `umount`.
+
+El boot sin microSD no esta resuelto. El SPL si carga U-Boot desde eMMC:
+
+```text
+U-Boot SPL 2025.07-rc4-dirty
+Trying to boot from MMC2
+```
+
+Pero U-Boot proper no detecta ningun MMC utilizable:
+
+```text
+MMC:   mmc@1c0f000: 0, mmc@1c10000: 2, mmc@1c11000: 1
+MMC: no card present
+Device 0: unknown device
+Config file not found
+```
+
+Pruebas manuales con `mmc dev 2`, `mmc rescan`, `mmc info` y `part list mmc 2`
+tambien devolvieron `MMC: no card present`. Por lo tanto el blocker actual no
+es el rootfs Debian 12, sino la inicializacion MMC/eMMC en U-Boot proper al
+arrancar sin SD.
 
 Riesgo observado: SD y eMMC comparten los mismos `PARTUUID` (`800e6fd4-01` y
 `800e6fd4-02`). Evitar `root=PARTUUID=...` mientras ambos medios esten
@@ -222,6 +252,8 @@ Configuracion final:
 	status = "okay";
 };
 ```
+
+Referencia: `notes/2026-05-25-emmc-debian12-install-uboot-blocker.md`.
 
 ### USB Type-A
 
@@ -390,12 +422,13 @@ picocom -b 115200 --databits 8 --parity n --stopbits 1 --flow n /dev/cu.usbseria
 - `notes/2026-05-21-handoff-usb-4puertos.md`: validacion USB 4 puertos.
 - `notes/2026-05-21-inspeccion-imagenes-vendor.md`: referencia FEX/vendor para MMC, USB y AP6330.
 - `notes/2026-05-24-emmc-debian11-inspection.md`: inspeccion read-only de la eMMC Debian 11 y riesgos para migracion.
+- `notes/2026-05-25-emmc-debian12-install-uboot-blocker.md`: instalacion Debian 12 a eMMC y blocker U-Boot proper.
 
 ## Pendientes
 
 1. Bluetooth AP6330: instalar/configurar `bcm40183b2.hcd` y validar UART/GPIOs BT.
 2. Conectividad WiFi completa: instalar `wpasupplicant` o `iwd` y probar asociacion a red.
-3. eMMC: preservar la instalacion Debian 11 actual, capturar layout/bootloader y validar migracion o boot de Debian 12 desde eMMC.
+3. eMMC boot: corregir U-Boot proper para que detecte eMMC/MMC al arrancar sin microSD; el rootfs Debian 12 ya fue instalado en eMMC.
 4. HDMI/VGA: probar salida de video.
 5. Capturar un boot log limpio completo con el DTB final, sin payloads de transferencia.
 6. Promover o guardar referencias FEX en `docs/device-tree/` como tabla FEX -> DTS.
