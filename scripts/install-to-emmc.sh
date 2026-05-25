@@ -301,7 +301,7 @@ fi
 
 log
 log "Formatting eMMC root partition..."
-run mkfs.ext4 -F -L cb4-rootfs "$TARGET_ROOT"
+run mkfs.ext4 -F -E nodiscard -L cb4-rootfs "$TARGET_ROOT"
 
 log
 log "Mounting target root..."
