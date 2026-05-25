@@ -28,6 +28,7 @@ Registrar cada intento de boot con contexto suficiente para:
 | 2026-05-22 | Bookworm SD (WiFi AP6330) | 6.1.0-37-armmp | 2025.04 johang | microSD | sun9i-a80-cubieboard4 (WiFi fixes + firmware) | ✅ OK | ~35s | WiFi AP6330 funcional (wlan0): `ifconfig wlan0 up` + `iw dev wlan0 scan` OK, HT hasta 300 Mbps. | `logs/2026-05-22-final-wifi-validation.log` |
 | 2026-05-25 | Bookworm copiado desde SD a eMMC | 6.1.0-37-armmp | 2025.07-rc4-dirty | eMMC sin microSD | sun9i-a80-cubieboard4 (DTB copiado en rootfs eMMC) | ⚠️ PARCIAL | No llega a kernel | SPL carga U-Boot desde `MMC2`, pero U-Boot proper reporta `MMC: no card present` y no puede leer `/boot` desde eMMC. Rootfs eMMC instalado OK. | `notes/2026-05-25-emmc-debian12-install-uboot-blocker.md` |
 | 2026-05-25 | Bookworm SD con eMMC presente tras instalacion | 6.1.0-37-armmp | 2025.04 johang | microSD + eMMC | `dtb/sun9i-a80-cubieboard4.dtb` | ⚠️ PARCIAL | ~35s hasta initramfs | `boot.scr` usaba `root=/dev/mmcblk0p2`, pero Linux enumero SD como `mmcblk1` y eMMC como `mmcblk2`. Solucion: usar `root=UUID=...`. | `notes/2026-05-25-sd-initramfs-root-device-name.md` |
+| 2026-05-25 | Bookworm SD con `boot.scr` corregido | 6.1.0-37-armmp | 2025.04 johang | microSD + eMMC | `dtb/sun9i-a80-cubieboard4.dtb` | ✅ OK | ~35s | Boot automatico hasta login usando `root=UUID=66c76c3a-4c75-4bb3-9665-dbb0dce7649e`; ya no depende de `mmcblkN`. | `notes/2026-05-25-sd-initramfs-root-device-name.md` |
 
 ## Criterios de estado
 

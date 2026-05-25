@@ -65,5 +65,54 @@ root=UUID=<uuid-del-rootfs>
 
 ## Pendiente de validacion
 
-Reconstruir una microSD con `scripts/build-sd-image.sh` en Linux y validar que
-el kernel bootea usando `root=UUID=...` aunque la SD aparezca como `mmcblk1`.
+- Reconstruir una microSD con `scripts/build-sd-image.sh` en Linux y validar
+  que la imagen nueva contiene `boot.scr` con `root=UUID=...`.
+
+## Validacion en SD existente
+
+Se corrigio la SD existente desde la consola serial:
+
+1. Se booteo manualmente desde U-Boot usando
+   `root=UUID=66c76c3a-4c75-4bb3-9665-dbb0dce7649e`.
+2. Debian 12 llego a login correctamente.
+3. Dentro del sistema se confirmo:
+
+   ```text
+   rootdev=/dev/mmcblk0p2 uuid=66c76c3a-4c75-4bb3-9665-dbb0dce7649e kernel=6.1.0-37-armmp
+   ```
+
+4. Se guardaron backups:
+
+   ```text
+   /boot/boot.cmd.pre-root-uuid-fix
+   /boot/boot.scr.pre-root-uuid-fix
+   ```
+
+5. Se genero un nuevo `/boot/boot.cmd`:
+
+   ```text
+   setenv devtype mmc
+   load ${devtype} ${devnum}:${distro_bootpart} ${kernel_addr_r} /boot/vmlinuz-6.1.0-37-armmp
+   load ${devtype} ${devnum}:${distro_bootpart} ${ramdisk_addr_r} /boot/initrd.img-6.1.0-37-armmp
+   setenv ramdisk_size ${filesize}
+   setenv bootargs root=UUID=66c76c3a-4c75-4bb3-9665-dbb0dce7649e rw rootwait
+   load ${devtype} ${devnum}:${distro_bootpart} ${fdt_addr_r} /boot/sun9i-a80-cubieboard4.dtb
+   bootz ${kernel_addr_r} ${ramdisk_addr_r}:${ramdisk_size} ${fdt_addr_r}
+   ```
+
+6. Se recompilo `/boot/boot.scr` con:
+
+   ```sh
+   mkimage -C none -A arm -T script -d /boot/boot.cmd /boot/boot.scr
+   sync
+   ```
+
+7. Se reinicio sin intervenir U-Boot. El sistema llego nuevamente a login:
+
+   ```text
+   Debian GNU/Linux 12 debian ttyS0
+   debian login:
+   ```
+
+Resultado: SD existente corregida. El boot automatico desde SD ya no cae a
+initramfs por cambios en el orden `mmcblkN`.
