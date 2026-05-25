@@ -1,104 +1,111 @@
 # Cubieboard4 A80 Debian 12 revive
 
-Repositorio de bring-up para **Cubieboard4 / CC-A80 (Allwinner A80)** con
-Debian 12 armhf y kernel mainline. El resultado validado es una microSD que
-bootea hasta shell con Ethernet, USB Type-A y WiFi AP6330 funcionando.
+Bring-up and recovery repository for **Cubieboard4 / CC-A80 (Allwinner A80)**
+running Debian 12 armhf with a mainline kernel. The validated result is a
+microSD image that boots to shell with Ethernet, USB Type-A, and AP6330 WiFi
+working.
 
-## Estado validado
+Some investigation notes and raw logs are still in Spanish. The stable
+reproduction path is documented here in English.
 
-Validado en hardware real el 2026-05-22:
+## Validated Status
 
-| Subsistema | Estado | Notas |
+Validated on real hardware on 2026-05-22:
+
+| Subsystem | Status | Notes |
 |---|---|---|
-| Boot desde microSD | Funciona | U-Boot carga `boot.scr`; Linux usa `mmcblk0p2` |
-| Debian 12 armhf | Funciona | Kernel `6.1.0-37-armmp` |
-| Ethernet | Funciona | RTL8211E, link Gigabit Full Duplex |
-| USB Type-A | Funciona | Hub interno `05e3:0608`; pendrive probado en los 4 puertos |
-| WiFi AP6330 | Funciona | `wlan0` levanta y escanea redes; BCM4330/4 |
-| eMMC | Parcial | Linux la ve como eMMC de 7.30 GiB; Debian 12 se pudo instalar a eMMC, pero U-Boot proper no detecta MMC/eMMC al bootear sin microSD |
-| Bluetooth | Pendiente | Falta configurar firmware/UART |
-| VGA/HDMI | Pendiente | No validado todavia |
-| GPU PowerVR G6230 | Sin aceleracion mainline | Falta firmware publico para BVNC `1.75.2.30` |
+| microSD boot | Working | U-Boot loads `boot.scr`; Linux uses `mmcblk0p2` |
+| Debian 12 armhf | Working | Kernel `6.1.0-37-armmp` |
+| Ethernet | Working | RTL8211E, Gigabit Full Duplex link |
+| USB Type-A | Working | Internal `05e3:0608` hub; flash drive tested on all 4 ports |
+| AP6330 WiFi | Working | `wlan0` comes up and scans networks; BCM4330/4 |
+| eMMC | Partial | Linux sees the 7.30 GiB eMMC; Debian 12 can be installed to eMMC, but U-Boot proper does not detect MMC/eMMC when booting without microSD |
+| Bluetooth | Pending | Firmware/UART setup still needed |
+| VGA/HDMI | Pending | Not validated yet |
+| PowerVR G6230 GPU | No mainline acceleration | Public firmware for BVNC `1.75.2.30` is missing |
 
-La evidencia detallada esta en
-[docs/estado-validado.md](docs/estado-validado.md) y
+Detailed evidence is available in
+[docs/estado-validado.md](docs/estado-validado.md) and
 [logs/2026-05-22-final-wifi-validation.log](logs/2026-05-22-final-wifi-validation.log).
 
-## Que hay en este repo
+## Repository Contents
 
-- [dtb/sun9i-a80-cubieboard4.dtb](dtb/sun9i-a80-cubieboard4.dtb): DTB validado
-  para boot SD, USB Type-A, eMMC detectada y WiFi SDIO AP6330.
-- [docs/](docs/): estado consolidado, matriz de pruebas, referencias tecnicas.
-- [notes/](notes/): bitacora de investigacion y handoffs.
-- [logs/](logs/): evidencia de validacion.
+- [dtb/sun9i-a80-cubieboard4.dtb](dtb/sun9i-a80-cubieboard4.dtb): validated
+  DTB for SD boot, USB Type-A, eMMC detection, and AP6330 SDIO WiFi.
+- [scripts/build-sd-image.sh](scripts/build-sd-image.sh): reproducible SD
+  image builder for Linux hosts.
+- [scripts/install-to-emmc.sh](scripts/install-to-emmc.sh): conservative
+  SD-to-eMMC rootfs installer for testing.
+- [docs/](docs/): consolidated status, test matrix, and technical references.
+- [notes/](notes/): investigation notes and handoffs.
+- [logs/](logs/): validation evidence.
 
-No se versionan imagenes completas, dumps ni firmwares vendor por tamano y
-licenciamiento. Para reproducir la microSD se necesitan artefactos externos.
-El inventario de imagenes, mirrors y SHA256 esta en
+Full OS images, dumps, and vendor firmware are not committed to git because of
+size and licensing. Reproducing the microSD image requires external artifacts.
+The image inventory, mirrors, and SHA256 checksums are documented in
 [docs/artefactos-externos.md](docs/artefactos-externos.md).
 
-## Base recomendada por Johan
+## Johan Base Images
 
-Johan mantiene builds vanilla Debian/Ubuntu para Cubieboard4:
+Johan Ahlberg maintains vanilla Debian/Ubuntu SD-card images for Cubieboard4:
 
 ```text
 https://sd-card-images.johang.se/boards/cubieboard4.html
 ```
 
-Links directos recomendados al 2026-05-24:
+Direct links recommended by Johan as of 2026-05-24:
 
 ```sh
 curl -O https://dl.sd-card-images.johang.se/boots/2026-05-01/boot-cubieboard4.bin.gz
 curl -O https://dl.sd-card-images.johang.se/debians/2026-05-18/debian-bookworm-armhf-ja3iex.bin.gz
 ```
 
-El servidor de Johan rota builds viejas; si esos links vencen, usar la pagina
-de Cubieboard4 para elegir el boot image y Debian Bookworm mas recientes.
+Johan's server rotates old builds. If those links expire, use the Cubieboard4
+page to pick the latest boot image and Debian Bookworm rootfs.
 
-La imagen Debian usa como password de `root` el sufijo del nombre de archivo.
-Para `debian-bookworm-armhf-ja3iex.bin.gz`, el password es:
+The Debian image uses the filename suffix as the `root` password. For
+`debian-bookworm-armhf-ja3iex.bin.gz`, the password is:
 
 ```text
 ja3iex
 ```
 
-## Artefactos necesarios
+## Required Artifacts
 
-Para reproducir la imagen con los fixes de este repo se necesitan:
+To reproduce the validated image with this repository's fixes, use the
+preserved assets from the GitHub Release `external-images-2026-05`:
 
-| Archivo | Origen | Uso |
+| File | Source | Purpose |
 |---|---|---|
-| `boot-cubieboard4.bin.gz` | Johan | Boot/U-Boot base para Cubieboard4 |
-| `debian-bookworm-armhf-ja3iex.bin.gz` | Johan | Rootfs Debian 12 armhf |
-| `dtb/sun9i-a80-cubieboard4.dtb` | Este repo | DTB final validado |
-| `fw_bcm40183b2_ag.bin` | Imagen vendor/Linaro | Firmware WiFi AP6330 |
-| `nvram_ap6330.txt` | Imagen vendor/Linaro | NVRAM WiFi AP6330 |
+| `boot-cubieboard4.bin.gz` | Johan, mirrored in this repo release | Base boot/U-Boot image for Cubieboard4 |
+| `debian-bookworm-armhf-vim3ve.bin.gz` | Johan, mirrored in this repo release | Debian 12 armhf rootfs used during validation |
+| `dtb/sun9i-a80-cubieboard4.dtb` | This repository | Final validated DTB |
+| `fw_bcm40183b2_ag.bin` | Vendor/Linaro image | AP6330 WiFi firmware |
+| `nvram_ap6330.txt` | Vendor/Linaro image | AP6330 WiFi NVRAM |
 
-Los nombres usados durante la validacion original fueron:
+Original validation used these local filenames:
 
 - `images/boot-cubieboard4.bin.gz`
 - `images/debian-bookworm-armhf-vim3ve.bin.gz`
-- `android4.4-cb4-emmc-v4.3.20170717.img.7z` o una imagen vendor/Linaro con
-  `lib/firmware/ap6330/`
+- `android4.4-cb4-emmc-v4.3.20170717.img.7z` or another vendor/Linaro image
+  containing `lib/firmware/ap6330/`
 
-La validacion documentada en `logs/` se hizo con una build anterior de Johan
-(`vim3ve`). El flujo es el mismo para la build `ja3iex`; si se usa una build
-nueva, registrar fecha y hashes.
+The same flow should work with newer Johan builds, such as `ja3iex`, but a new
+boot should be recorded with dates and hashes.
 
-El link MEGA, la GitHub Release y los hashes de las imagenes locales estan
-documentados. Ver
+The MEGA mirror, GitHub Release, and local image checksums are documented in
 [docs/artefactos-externos.md](docs/artefactos-externos.md),
-[notes/2026-05-21-inspeccion-imagenes-vendor.md](notes/2026-05-21-inspeccion-imagenes-vendor.md)
-y [docs/referencias-a80.md](docs/referencias-a80.md).
+[notes/2026-05-21-inspeccion-imagenes-vendor.md](notes/2026-05-21-inspeccion-imagenes-vendor.md),
+and [docs/referencias-a80.md](docs/referencias-a80.md).
 
-## Crear la imagen microSD
+## Build The microSD Image
 
-Por el momento, el script automatico **solo funciona en Linux**. Necesita
-`losetup` y montaje ext4 con permisos de root para poder modificar la particion
-rootfs de la imagen. En macOS se puede descargar/concatenar la imagen a mano,
-pero el paso de instalar DTB y firmware requiere Linux o una VM Linux.
+For now, the automatic builder **only works on Linux**. It needs `losetup` and
+root-mounted ext4 support in order to patch the rootfs partition inside the
+image. On macOS you can manually download and concatenate the image pieces, but
+installing the DTB and firmware requires Linux or a Linux VM.
 
-Forma recomendada desde una maquina Linux o VM Linux:
+Recommended flow from a Linux host or Linux VM:
 
 ```sh
 sudo scripts/build-sd-image.sh \
@@ -106,26 +113,27 @@ sudo scripts/build-sd-image.sh \
   --output /tmp/cb4-bookworm/cubieboard4-a80-debian12-sd.img
 ```
 
-El script descarga los assets preservados en la GitHub Release
-`external-images-2026-05`, verifica SHA256, arma la imagen SD, instala el DTB
-validado y copia el firmware AP6330 con los nombres que espera `brcmfmac`.
+The script downloads the preserved assets from the GitHub Release
+`external-images-2026-05`, verifies SHA256 checksums, builds the SD image,
+installs the validated DTB, and copies the AP6330 firmware using the filenames
+expected by `brcmfmac`.
 
-Requisitos del host:
+Host requirements:
 
-- Linux con permisos de root para `losetup` y montaje ext4;
-- `curl` o `wget`;
+- Linux with root permissions for `losetup` and ext4 mounting;
+- `curl` or `wget`;
 - `sha256sum`, `gzip`, `losetup`, `mount`, `umount`;
-- `7z`, salvo que se use `--firmware-dir` o `--no-firmware`.
+- `7z`, unless using `--firmware-dir` or `--no-firmware`.
 
-Ejemplo usando firmware ya extraido:
+Example using already extracted firmware:
 
 ```sh
 sudo scripts/build-sd-image.sh \
-  --firmware-dir /ruta/a/lib/firmware/ap6330 \
+  --firmware-dir /path/to/lib/firmware/ap6330 \
   --output /tmp/cubieboard4-a80-debian12-sd.img
 ```
 
-Flujo manual parcial en macOS/Linux:
+Partial manual flow for macOS/Linux:
 
 ```sh
 mkdir -p /private/tmp/cb4-bookworm
@@ -140,18 +148,18 @@ zcat boot-cubieboard4.bin.gz debian-bookworm-armhf-vim3ve.bin.gz \
   > cubieboard4-bookworm-test.img
 ```
 
-La imagen resultante debe tener:
+The resulting image should contain:
 
-- particion 1: FAT32 boot, sector `8192`, 28 MiB;
-- particion 2: ext4 rootfs, sector `65536`, aproximadamente 3.5 GiB.
+- partition 1: FAT32 boot, sector `8192`, 28 MiB;
+- partition 2: ext4 rootfs, sector `65536`, around 3.5 GiB.
 
-## Instalar el DTB validado
+## Install The Validated DTB
 
-Montar la particion rootfs ext4 de la imagen desde Linux o una VM Linux. macOS
-no monta ext4 de forma nativa.
+Mount the image's ext4 rootfs partition from Linux or a Linux VM. macOS does
+not mount ext4 natively.
 
-La particion rootfs empieza en el sector `65536`; con sectores de 512 bytes,
-el offset es `33554432`.
+The rootfs partition starts at sector `65536`; with 512-byte sectors, the
+offset is `33554432`.
 
 ```sh
 sudo mkdir -p /mnt/cb4-root
@@ -159,26 +167,26 @@ sudo mount -o loop,offset=33554432 \
   /private/tmp/cb4-bookworm/cubieboard4-bookworm-test.img \
   /mnt/cb4-root
 
-sudo cp /ruta/al/repo/dtb/sun9i-a80-cubieboard4.dtb \
+sudo cp /path/to/repo/dtb/sun9i-a80-cubieboard4.dtb \
   /mnt/cb4-root/boot/sun9i-a80-cubieboard4.dtb
 
 sync
 sudo umount /mnt/cb4-root
 ```
 
-En las pruebas, U-Boot cargo el DTB desde la particion ext4:
+During validation, U-Boot loaded the DTB from the ext4 partition:
 
 ```text
 /boot/sun9i-a80-cubieboard4.dtb
 ```
 
-El cambio critico para boot estable es `broken-cd` en `mmc0`; sin eso, U-Boot
-SPL puede arrancar, pero U-Boot/Linux pueden perder la SD por card-detect.
+The critical fix for stable boot is `broken-cd` on `mmc0`; without it, U-Boot
+SPL may start, but U-Boot/Linux can lose the SD card because of card-detect.
 
-## Instalar firmware WiFi AP6330
+## Install AP6330 WiFi Firmware
 
-Con el mismo rootfs montado en `/mnt/cb4-root`, copiar los firmwares Broadcom
-con los nombres que espera `brcmfmac`:
+With the same rootfs mounted at `/mnt/cb4-root`, copy the Broadcom firmware
+using the names expected by `brcmfmac`:
 
 ```sh
 sudo mkdir -p /mnt/cb4-root/lib/firmware/brcm
@@ -189,7 +197,7 @@ sudo cp nvram_ap6330.txt \
 sync
 ```
 
-En el boot validado, el kernel mostro:
+In the validated boot, the kernel showed:
 
 ```text
 brcmfmac: brcm_fw_alloc_request: using brcm/brcmfmac4330-sdio for chip BCM4330/4
@@ -197,15 +205,15 @@ brcmfmac: Firmware: BCM4330/4 wl0: Jan  6 2014 15:11:29 version 5.90.195.89
 wlan0: ether e0:76:d0:b0:d1:ea
 ```
 
-## Grabar la microSD
+## Write The microSD Card
 
-En macOS, identificar primero el disco correcto:
+On macOS, identify the correct target disk first:
 
 ```sh
 diskutil list external physical
 ```
 
-Luego reemplazar `/dev/disk4` por el dispositivo real:
+Then replace `/dev/disk4` with the real target device:
 
 ```sh
 diskutil unmountDisk force /dev/disk4
@@ -215,33 +223,33 @@ sync
 diskutil eject /dev/disk4
 ```
 
-Atencion: `dd` destruye el contenido del disco destino.
+Warning: `dd` destroys the contents of the target disk.
 
-## Consola serial
+## Serial Console
 
-Parametros validados:
+Validated settings:
 
-- 115200 baudios
+- 115200 baud
 - 8N1
-- sin flow control
+- no flow control
 
-Ejemplo:
+Example:
 
 ```sh
 picocom -b 115200 --databits 8 --parity n --stopbits 1 --flow n /dev/cu.usbserial-14230
 ```
 
-En tu maquina puede cambiar el dispositivo serial. Revisar con:
+The serial device name can differ on your machine. Check it with:
 
 ```sh
 ls /dev/cu.usbserial*
 ```
 
-## Validar el sistema
+## Validate The System
 
-Despues de bootear, estos comandos reproducen la validacion minima.
+After booting, these commands reproduce the minimum validation.
 
-Boot y almacenamiento:
+Boot and storage:
 
 ```sh
 uname -a
@@ -269,55 +277,58 @@ Ethernet:
 dmesg | grep -i 'Link is Up'
 ```
 
-Resultados esperados:
+Expected results:
 
-- SD como `mmcblk0`.
-- eMMC como `mmcblk1`.
-- SD y eMMC pueden compartir `PARTUUID` si vienen del mismo layout; usar
-  `/dev/mmcblk0p2` o regenerar identificadores antes de depender de
+- SD appears as `mmcblk0`.
+- eMMC appears as `mmcblk1`.
+- SD and eMMC may share `PARTUUID` if they come from the same layout; use
+  `/dev/mmcblk0p2` or regenerate identifiers before relying on
   `root=PARTUUID=...`.
-- Hub USB Genesys Logic `05e3:0608`.
-- `wlan0` presente y capaz de escanear redes.
-- Ethernet con link Gigabit si hay cable conectado.
+- Genesys Logic USB hub `05e3:0608`.
+- `wlan0` present and able to scan networks.
+- Ethernet reports a Gigabit link if a cable is connected.
 
-## Cambios tecnicos clave
+## Key Technical Changes
 
-El DTB validado corrige estos puntos:
+The validated DTB fixes these points:
 
-- `mmc0`: SD con `broken-cd`.
-- `mmc1`: AP6330 por SDIO 4-bit, no eMMC.
-- `mmc2`: eMMC 8-bit.
-- `usbphy1` y `usbphy3`: `phy-supply` asociado a reguladores VBUS.
-- `wifi_pwrseq`: reset/power sequencing para AP6330.
-- firmware AP6330 instalado como `brcmfmac4330-sdio.*`.
+- `mmc0`: SD with `broken-cd`.
+- `mmc1`: AP6330 over 4-bit SDIO, not eMMC.
+- `mmc2`: 8-bit eMMC.
+- `usbphy1` and `usbphy3`: `phy-supply` connected to VBUS regulators.
+- `wifi_pwrseq`: AP6330 reset/power sequencing.
+- AP6330 firmware installed as `brcmfmac4330-sdio.*`.
 
-Ver el detalle DTS en [docs/estado-validado.md](docs/estado-validado.md).
+See DTS details in [docs/estado-validado.md](docs/estado-validado.md).
 
-## Pendientes
+## Pending Work
 
-- Agregar o reconstruir el DTS fuente correspondiente al DTB final.
-- Resolver boot desde eMMC: SPL carga U-Boot desde `MMC2`, pero U-Boot proper
-  reporta `MMC: no card present` y no puede leer `/boot` desde eMMC.
-- Validar VGA/HDMI.
-- Configurar Bluetooth AP6330.
-- Capturar un boot log limpio completo con el DTB final.
+- Add or reconstruct the DTS source corresponding to the final DTB.
+- Fix eMMC boot: SPL loads U-Boot from `MMC2`, but U-Boot proper reports
+  `MMC: no card present` and cannot read `/boot` from eMMC.
+- Validate VGA/HDMI.
+- Configure AP6330 Bluetooth.
+- Capture a clean full boot log with the final DTB.
 
-## Script eMMC
+## eMMC Script
 
-Hay un instalador conservador para copiar el sistema SD actual a eMMC:
+There is a conservative installer for copying the currently running SD system
+to eMMC:
 
 ```sh
 sudo scripts/install-to-emmc.sh --backup-dir /media/usb
 ```
 
-Por defecto corre en modo dry-run. Para ejecutar de verdad:
+It runs in dry-run mode by default. To execute for real:
 
 ```sh
 sudo scripts/install-to-emmc.sh --backup-dir /media/usb --execute
 ```
 
-El script no toca la region raw de bootloader ni `mmcblk1boot0/boot1`; solo
-reemplaza `/dev/mmcblk1p2`. Requiere backup y confirmacion `ERASE-EMMC`.
-En la prueba real del 2026-05-25 la copia a eMMC funciono, pero el boot sin
-microSD quedo bloqueado en U-Boot proper. Ver
+The script does not touch the raw bootloader area or `mmcblk1boot0/boot1`; it
+only replaces `/dev/mmcblk1p2`. It requires a backup directory and confirmation
+with `ERASE-EMMC`.
+
+In the real 2026-05-25 test, the copy to eMMC worked, but booting without
+microSD got stuck in U-Boot proper. See
 [notes/2026-05-25-emmc-debian12-install-uboot-blocker.md](notes/2026-05-25-emmc-debian12-install-uboot-blocker.md).
