@@ -347,20 +347,24 @@ fi
 log
 log "Writing eMMC boot script..."
 BOOT_CMD="$MOUNTPOINT/boot/boot.cmd"
+TARGET_ROOT_SPEC="UUID=<target-rootfs-uuid-after-format>"
 if [ "$DRY_RUN" -eq 0 ]; then
+	TARGET_ROOT_UUID="$(blkid -s UUID -o value "$TARGET_ROOT")"
+	[ -n "$TARGET_ROOT_UUID" ] || die "cannot determine target root UUID for: $TARGET_ROOT"
+	TARGET_ROOT_SPEC="UUID=$TARGET_ROOT_UUID"
 	cat >"$BOOT_CMD" <<EOF
 setenv devtype mmc
 setenv devnum 1
 load \${devtype} \${devnum}:\${distro_bootpart} \${kernel_addr_r} /boot/vmlinuz-${KERNEL_VERSION}
 load \${devtype} \${devnum}:\${distro_bootpart} \${ramdisk_addr_r} /boot/initrd.img-${KERNEL_VERSION}
 setenv ramdisk_size \${filesize}
-setenv bootargs root=${TARGET_ROOT} rw rootwait
+setenv bootargs root=${TARGET_ROOT_SPEC} rw rootwait
 load \${devtype} \${devnum}:\${distro_bootpart} \${fdt_addr_r} /boot/sun9i-a80-cubieboard4.dtb
 bootz \${kernel_addr_r} \${ramdisk_addr_r}:\${ramdisk_size} \${fdt_addr_r}
 EOF
 	mkimage -C none -A arm -T script -d "$BOOT_CMD" "$MOUNTPOINT/boot/boot.scr"
 else
-	log "+ write $BOOT_CMD for devnum 1 and root=$TARGET_ROOT"
+	log "+ write $BOOT_CMD for devnum 1 and root=$TARGET_ROOT_SPEC"
 	log "+ mkimage -C none -A arm -T script -d $BOOT_CMD $MOUNTPOINT/boot/boot.scr"
 fi
 
@@ -387,5 +391,5 @@ Next validation step:
   4. capture serial log
 
 Expected eMMC boot root:
-  $TARGET_ROOT
+  $TARGET_ROOT_SPEC
 EOF

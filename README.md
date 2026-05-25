@@ -116,13 +116,15 @@ sudo scripts/build-sd-image.sh \
 The script downloads the preserved assets from the GitHub Release
 `external-images-2026-05`, verifies SHA256 checksums, builds the SD image,
 installs the validated DTB, and copies the AP6330 firmware using the filenames
-expected by `brcmfmac`.
+expected by `brcmfmac`. It also regenerates `/boot/boot.scr` so the kernel uses
+`root=UUID=...` instead of a fragile `/dev/mmcblkNp2` device name.
 
 Host requirements:
 
 - Linux with root permissions for `losetup` and ext4 mounting;
 - `curl` or `wget`;
-- `sha256sum`, `gzip`, `losetup`, `mount`, `umount`;
+- `sha256sum`, `gzip`, `blkid`, `losetup`, `mount`, `umount`;
+- `mkimage` from `u-boot-tools`;
 - `7z`, unless using `--firmware-dir` or `--no-firmware`.
 
 Example using already extracted firmware:
@@ -279,11 +281,15 @@ dmesg | grep -i 'Link is Up'
 
 Expected results:
 
-- SD appears as `mmcblk0`.
-- eMMC appears as `mmcblk1`.
-- SD and eMMC may share `PARTUUID` if they come from the same layout; use
-  `/dev/mmcblk0p2` or regenerate identifiers before relying on
-  `root=PARTUUID=...`.
+- SD and eMMC both appear as `mmcblk*` block devices.
+- Depending on probe order, SD may appear as `mmcblk0` or `mmcblk1`; eMMC may
+  appear as `mmcblk1` or `mmcblk2`.
+- SD and eMMC device numbers may change across boots if SDIO WiFi probes as an
+  MMC device first. Boot scripts should use filesystem `UUID`, not
+  `/dev/mmcblkNp2`.
+- SD and eMMC may share `PARTUUID` if they come from the same layout; avoid
+  `root=PARTUUID=...` while both media are present unless identifiers are
+  regenerated.
 - Genesys Logic USB hub `05e3:0608`.
 - `wlan0` present and able to scan networks.
 - Ethernet reports a Gigabit link if a cable is connected.
@@ -327,7 +333,8 @@ sudo scripts/install-to-emmc.sh --backup-dir /media/usb --execute
 
 The script does not touch the raw bootloader area or `mmcblk1boot0/boot1`; it
 only replaces `/dev/mmcblk1p2`. It requires a backup directory and confirmation
-with `ERASE-EMMC`.
+with `ERASE-EMMC`. The generated eMMC `boot.scr` uses `root=UUID=...` for the
+target rootfs instead of a fragile `/dev/mmcblkNp2` device name.
 
 In the real 2026-05-25 test, the copy to eMMC worked, but booting without
 microSD got stuck in U-Boot proper. See

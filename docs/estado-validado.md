@@ -123,9 +123,10 @@ La solucion estable fue ignorar card-detect:
 Resultado validado:
 
 - U-Boot lee `mmc 0`.
-- Linux enumera la SD como `mmcblk0`.
-- La eMMC queda como `mmcblk1`.
 - Boot automatico desde `boot.scr` en `mmc 0:2`.
+- Linux puede enumerar SD/eMMC con distintos nombres `mmcblkN` segun el orden
+  de probe, especialmente con SDIO WiFi presente. No usar `/dev/mmcblkNp2`
+  como root persistente; usar `root=UUID=...`.
 
 ### WiFi AP6330 en `mmc1`
 
@@ -234,6 +235,11 @@ arrancar sin SD.
 Riesgo observado: SD y eMMC comparten los mismos `PARTUUID` (`800e6fd4-01` y
 `800e6fd4-02`). Evitar `root=PARTUUID=...` mientras ambos medios esten
 presentes, salvo que antes se regeneren identificadores.
+
+Riesgo adicional observado el 2026-05-25: el boot desde SD puede caer a
+initramfs si `boot.scr` usa `root=/dev/mmcblk0p2`, porque Linux enumero la SD
+como `mmcblk1` y la eMMC como `mmcblk2`. Ver
+`notes/2026-05-25-sd-initramfs-root-device-name.md`.
 
 Configuracion final:
 

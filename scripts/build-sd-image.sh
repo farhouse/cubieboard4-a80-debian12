@@ -52,8 +52,9 @@ Options:
   -h, --help           Show this help.
 
 Requirements:
-  Linux root shell with curl or wget, sha256sum, gzip, losetup, mount, umount.
-  7z is also required unless --firmware-dir or --no-firmware is used.
+  Linux root shell with curl or wget, sha256sum, gzip, blkid, losetup, mount,
+  umount, and mkimage from u-boot-tools. 7z is also required unless
+  --firmware-dir or --no-firmware is used.
 EOF
 }
 
@@ -156,6 +157,44 @@ copy_ap6330_firmware() {
 	install -m 0644 "$fw_txt" "$target_dir/brcmfmac4330-sdio.txt"
 }
 
+detect_kernel_version() {
+	local boot_dir="$1/boot"
+	local kernel=""
+	local path
+
+	for path in "$boot_dir"/vmlinuz-*; do
+		[ -f "$path" ] || continue
+		kernel="$(basename "$path")"
+	done
+
+	[ -n "$kernel" ] || die "could not find kernel image in: $boot_dir"
+	printf '%s\n' "${kernel#vmlinuz-}"
+}
+
+write_sd_boot_script() {
+	local root_part="$1"
+	local root_mount="$2"
+	local root_uuid
+	local kernel_version
+	local boot_cmd="$root_mount/boot/boot.cmd"
+
+	root_uuid="$(blkid -s UUID -o value "$root_part")"
+	[ -n "$root_uuid" ] || die "could not determine rootfs UUID for: $root_part"
+	kernel_version="$(detect_kernel_version "$root_mount")"
+
+	log "Writing SD boot script with root=UUID=$root_uuid"
+	cat >"$boot_cmd" <<EOF
+setenv devtype mmc
+load \${devtype} \${devnum}:\${distro_bootpart} \${kernel_addr_r} /boot/vmlinuz-${kernel_version}
+load \${devtype} \${devnum}:\${distro_bootpart} \${ramdisk_addr_r} /boot/initrd.img-${kernel_version}
+setenv ramdisk_size \${filesize}
+setenv bootargs root=UUID=${root_uuid} rw rootwait
+load \${devtype} \${devnum}:\${distro_bootpart} \${fdt_addr_r} /boot/sun9i-a80-cubieboard4.dtb
+bootz \${kernel_addr_r} \${ramdisk_addr_r}:\${ramdisk_size} \${fdt_addr_r}
+EOF
+	mkimage -C none -A arm -T script -d "$boot_cmd" "$root_mount/boot/boot.scr"
+}
+
 validate_output_path() {
 	case "$OUTPUT" in
 		/dev/*)
@@ -248,9 +287,11 @@ done
 [ "$(uname -s)" = "Linux" ] || die "this image builder must run on Linux"
 [ "$(id -u)" -eq 0 ] || die "run as root; loop mount is required"
 
+require_cmd blkid
 require_cmd gzip
 require_cmd install
 require_cmd losetup
+require_cmd mkimage
 require_cmd mount
 require_cmd mountpoint
 require_cmd sha256sum
@@ -287,6 +328,7 @@ mount "$root_part" "$ROOT_MOUNT"
 
 log "Installing validated DTB"
 install -D -m 0644 "$DTB" "$ROOT_MOUNT/boot/sun9i-a80-cubieboard4.dtb"
+write_sd_boot_script "$root_part" "$ROOT_MOUNT"
 
 if [ "$WITH_FIRMWARE" -eq 1 ]; then
 	if [ -n "$FIRMWARE_DIR" ]; then
