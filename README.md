@@ -93,6 +93,11 @@ y [docs/referencias-a80.md](docs/referencias-a80.md).
 
 ## Crear la imagen microSD
 
+Por el momento, el script automatico **solo funciona en Linux**. Necesita
+`losetup` y montaje ext4 con permisos de root para poder modificar la particion
+rootfs de la imagen. En macOS se puede descargar/concatenar la imagen a mano,
+pero el paso de instalar DTB y firmware requiere Linux o una VM Linux.
+
 Forma recomendada desde una maquina Linux o VM Linux:
 
 ```sh
@@ -120,7 +125,7 @@ sudo scripts/build-sd-image.sh \
   --output /tmp/cubieboard4-a80-debian12-sd.img
 ```
 
-Flujo manual equivalente en macOS/Linux:
+Flujo manual parcial en macOS/Linux:
 
 ```sh
 mkdir -p /private/tmp/cb4-bookworm
