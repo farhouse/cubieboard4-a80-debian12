@@ -93,18 +93,45 @@ y [docs/referencias-a80.md](docs/referencias-a80.md).
 
 ## Crear la imagen microSD
 
-Ejemplo en macOS/Linux:
+Forma recomendada desde una maquina Linux o VM Linux:
+
+```sh
+sudo scripts/build-sd-image.sh \
+  --work-dir /tmp/cb4-bookworm \
+  --output /tmp/cb4-bookworm/cubieboard4-a80-debian12-sd.img
+```
+
+El script descarga los assets preservados en la GitHub Release
+`external-images-2026-05`, verifica SHA256, arma la imagen SD, instala el DTB
+validado y copia el firmware AP6330 con los nombres que espera `brcmfmac`.
+
+Requisitos del host:
+
+- Linux con permisos de root para `losetup` y montaje ext4;
+- `curl` o `wget`;
+- `sha256sum`, `gzip`, `losetup`, `mount`, `umount`;
+- `7z`, salvo que se use `--firmware-dir` o `--no-firmware`.
+
+Ejemplo usando firmware ya extraido:
+
+```sh
+sudo scripts/build-sd-image.sh \
+  --firmware-dir /ruta/a/lib/firmware/ap6330 \
+  --output /tmp/cubieboard4-a80-debian12-sd.img
+```
+
+Flujo manual equivalente en macOS/Linux:
 
 ```sh
 mkdir -p /private/tmp/cb4-bookworm
 cd /private/tmp/cb4-bookworm
 
-curl -O https://dl.sd-card-images.johang.se/boots/2026-05-01/boot-cubieboard4.bin.gz
-curl -O https://dl.sd-card-images.johang.se/debians/2026-05-18/debian-bookworm-armhf-ja3iex.bin.gz
+curl -L -O https://github.com/farhouse/cubieboard4-a80-debian12/releases/download/external-images-2026-05/boot-cubieboard4.bin.gz
+curl -L -O https://github.com/farhouse/cubieboard4-a80-debian12/releases/download/external-images-2026-05/debian-bookworm-armhf-vim3ve.bin.gz
 
-shasum -a 256 boot-cubieboard4.bin.gz debian-bookworm-armhf-ja3iex.bin.gz
+shasum -a 256 boot-cubieboard4.bin.gz debian-bookworm-armhf-vim3ve.bin.gz
 
-zcat boot-cubieboard4.bin.gz debian-bookworm-armhf-ja3iex.bin.gz \
+zcat boot-cubieboard4.bin.gz debian-bookworm-armhf-vim3ve.bin.gz \
   > cubieboard4-bookworm-test.img
 ```
 

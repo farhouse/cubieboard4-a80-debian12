@@ -58,6 +58,21 @@ Para verificar descargas:
 shasum -a 256 -c SHA256SUMS
 ```
 
+## Uso desde scripts
+
+El script [scripts/build-sd-image.sh](../scripts/build-sd-image.sh) usa la
+GitHub Release `external-images-2026-05` como fuente reproducible por defecto.
+Descarga y verifica:
+
+- `boot-cubieboard4.bin.gz`
+- `debian-bookworm-armhf-vim3ve.bin.gz`
+- `cb4-debian-server-hdmi-card-v1.0.img.7z`, solo para extraer firmware AP6330
+
+Luego genera una imagen SD, instala el DTB validado del repositorio y copia:
+
+- `fw_bcm40183b2_ag.bin` a `lib/firmware/brcm/brcmfmac4330-sdio.bin`
+- `nvram_ap6330.txt` a `lib/firmware/brcm/brcmfmac4330-sdio.txt`
+
 ## Nota de licenciamiento
 
 Las imagenes vendor pueden contener blobs y firmware propietarios. Se conservan
