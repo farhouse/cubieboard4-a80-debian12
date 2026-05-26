@@ -14,10 +14,12 @@ DOWNLOAD=1
 BOOT_ASSET="boot-cubieboard4.bin.gz"
 ROOTFS_ASSET="debian-bookworm-armhf-vim3ve.bin.gz"
 VENDOR_SD_ASSET="cb4-debian-server-hdmi-card-v1.0.img.7z"
+UBOOT_FIX_ASSET="u-boot-sunxi-with-spl-fixed.bin"
 
 BOOT_SHA256="768d66822c61534083330951a4c6ce21493a892596f5a1fb86bef692ccda1411"
 ROOTFS_SHA256="f9bc8b5e61599d4a680eca63ddd09dcde5392ba5161325e1031eef9b574adffb"
 VENDOR_SD_SHA256="8af6f75dffa4b215fa40e254365f54de89510a2c0934b5ab4ac61e441eada3f5"
+UBOOT_FIX_SHA256="56e1ce91b886be77673d9c27278a8ddf71775052085bc4b18583368a899e1f5d"
 
 CACHE_DIR=""
 ROOT_MOUNT=""
@@ -38,6 +40,7 @@ Default assets:
   boot:    $BOOT_ASSET
   rootfs:  $ROOTFS_ASSET
   vendor:  $VENDOR_SD_ASSET
+  uboot:   $UBOOT_FIX_ASSET (fixed eMMC clock register)
 
 Options:
   --output FILE        Final image path.
@@ -328,6 +331,12 @@ mount "$root_part" "$ROOT_MOUNT"
 
 log "Installing validated DTB"
 install -D -m 0644 "$DTB" "$ROOT_MOUNT/boot/sun9i-a80-cubieboard4.dtb"
+
+log "Installing fixed U-Boot (eMMC clock register fix)"
+download_asset "$UBOOT_FIX_ASSET"
+verify_sha256 "$CACHE_DIR/$UBOOT_FIX_ASSET" "$UBOOT_FIX_SHA256"
+install -D -m 0644 "$CACHE_DIR/$UBOOT_FIX_ASSET" "$ROOT_MOUNT/boot/u-boot-sunxi-with-spl.bin"
+
 write_sd_boot_script "$root_part" "$ROOT_MOUNT"
 
 if [ "$WITH_FIRMWARE" -eq 1 ]; then

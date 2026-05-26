@@ -1,6 +1,6 @@
 # Estado validado - Cubieboard4 A80 revive
 
-Fecha de consolidacion: 2026-05-22
+Fecha de consolidacion: 2026-05-26
 
 Este documento resume el estado estable del revive de la Cubieboard4 A80. Las
 notas en `notes/` quedan como bitacora de investigacion; este archivo debe
@@ -9,8 +9,8 @@ posible y que queda pendiente.
 
 ## Resumen ejecutivo
 
-La placa bootea Debian 12 Bookworm desde microSD con U-Boot 2025.04 johang y un
-DTB corregido. Quedaron validados:
+La placa bootea Debian 12 Bookworm desde microSD o eMMC con U-Boot 2025.07-rc4
+y DTB corregido. Quedaron validados:
 
 | Subsistema | Estado | Resultado validado |
 |---|---|---|
@@ -19,17 +19,17 @@ DTB corregido. Quedaron validados:
 | Ethernet RTL8211E | Funciona | Link Gigabit Full Duplex |
 | USB Type-A | Funciona | Hub interno `05e3:0608`, pendrive probado en los 4 puertos |
 | WiFi AP6330 | Funciona | `wlan0` levanta y escanea redes; BCM4330/4, HT hasta 300 Mbps |
-| eMMC | Parcial | Linux la enumera como eMMC de 7.30 GiB; Debian 12 se pudo instalar a eMMC; boot sin microSD bloqueado por U-Boot proper (`MMC: no card present`) |
+| eMMC | Funciona | Boot sin microSD: SPL → U-Boot proper → kernel → Debian 12 login. Root cause: typo `CONFIG_MACH_SUN9I_A80` → `CONFIG_MACH_SUN9I` en `get_mclk_offset()` (`drivers/mmc/sunxi_mmc.c:649`) |
 | Bluetooth AP6330 | Pendiente | Firmware `bcm40183b2.hcd` localizado, falta configurar |
 | HDMI/VGA | Pendiente | No probado todavia |
 
 ## Baseline de sistema
 
 - Placa: Cubieboard4 / CC-A80, Allwinner A80, 2 GiB RAM.
-- Bootloader: `U-Boot 2025.04johang-dirty`.
+- Bootloader: `U-Boot 2025.07-rc4` (fix clock register apply).
 - Sistema: Debian 12 Bookworm armhf.
-- Kernel: `6.1.0-37-armmp`.
-- Medio principal: microSD.
+- Kernel: `6.1.0-48-armmp` (eMMC boot), `6.1.0-37-armmp` (SD boot).
+- Medio principal: microSD o eMMC.
 - DTB usado: `dtb/sun9i-a80-cubieboard4.dtb`, persistido en `/boot/sun9i-a80-cubieboard4.dtb`.
 - Serial: `/dev/cu.usbserial-14230`, `115200 8N1`, sin flow control.
 
@@ -199,6 +199,8 @@ brcmfmac_sdio_htclk: HT Avail timeout
 Segun el FEX vendor, la eMMC corresponde a `mmc2`, 8-bit, pines `PC6-PC16`.
 Queda como almacenamiento interno detectado por Linux.
 
+#### Instalacion Debian 12
+
 La eMMC tenia Debian 11 Bullseye (`mmcblk1p2`) con kernel `5.10.0-34-armmp`.
 El 2026-05-25 se ejecuto el instalador `scripts/install-to-emmc.sh` y se copio
 Debian 12 desde la microSD a `/dev/mmcblk1p2`. El rootfs eMMC quedo como ext4
@@ -211,37 +213,61 @@ con label `cb4-rootfs` y UUID:
 La instalacion a eMMC completo correctamente, incluyendo backup previo en USB,
 `rsync`, generacion de `boot.cmd`/`boot.scr`, `sync` y `umount`.
 
-El boot sin microSD no esta resuelto. El SPL si carga U-Boot desde eMMC:
+#### Boot sin SD: root cause y fix
 
-```text
-U-Boot SPL 2025.07-rc4-dirty
-Trying to boot from MMC2
+El 2026-05-26 se resolvio el boot desde eMMC sin microSD. El SPL cargaba
+U-Boot desde MMC2 correctamente, pero U-Boot proper fallaba con
+`MMC: no card present`.
+
+**Root cause**: `get_mclk_offset()` en `drivers/mmc/sunxi_mmc.c:649`
+chequeaba `CONFIG_MACH_SUN9I_A80` (no existe en Kconfig) en vez de
+`CONFIG_MACH_SUN9I`. Esto causaba que U-Boot proper (DM path) escribiera
+el MMC2 clock register en `0x06000090` (default) en lugar de `0x06000418`,
+corrompiendo la respuesta de CMD2 (ALL_CID).
+
+```c
+// ANTES (bug)
+if (IS_ENABLED(CONFIG_MACH_SUN9I_A80))  // no existe!
+    return 0x410;
+return 0x88;  // direccion incorrecta → CMD2 falla
+
+// DESPUES (fix)
+if (IS_ENABLED(CONFIG_MACH_SUN9I))
+    return 0x410;
 ```
 
-Pero U-Boot proper no detecta ningun MMC utilizable:
+**Fix adicional**: se agrego `CONFIG_MACH_SUN9I` a la condicion de 8-bit mode
+en `sunxi_mmc_init()` para SPL.
 
-```text
-MMC:   mmc@1c0f000: 0, mmc@1c10000: 2, mmc@1c11000: 1
-MMC: no card present
-Device 0: unknown device
-Config file not found
+**Fix DTS**: se agregaron `mmc-hs200-1.8v`, `broken-cd`, `disable-wp`, `no-sd`
+al nodo mmc2.
+
+#### Resultado validado
+
+```
+U-Boot SPL 2025.07-rc4 (May 26 2026 - 15:33:13 +0000)
+U-Boot 2025.07-rc4 (May 26 2026 - 15:33:13 +0000)
+DRAM:  2 GiB
+MMC:   mmc 0 set mod-clk req 24000000 parent 24000000 n 1 m 1 rate 24000000
+Found U-Boot script /boot/boot.scr
+Loading Ramdisk ...
+mmc2: new DDR MMC card at address 0001
+mmcblk2: mmc2:0001 NCard  7.30 GiB
+Debian GNU/Linux 12 debian ttyS0
 ```
 
-Pruebas manuales con `mmc dev 2`, `mmc rescan`, `mmc info` y `part list mmc 2`
-tambien devolvieron `MMC: no card present`. Por lo tanto el blocker actual no
-es el rootfs Debian 12, sino la inicializacion MMC/eMMC en U-Boot proper al
-arrancar sin SD.
+Referencia: `notes/2026-05-26-emmc-boot-fix-clock-register.md`.
 
-Riesgo observado: SD y eMMC comparten los mismos `PARTUUID` (`800e6fd4-01` y
-`800e6fd4-02`). Evitar `root=PARTUUID=...` mientras ambos medios esten
-presentes, salvo que antes se regeneren identificadores.
+#### Riesgos
 
-Riesgo adicional observado el 2026-05-25: el boot desde SD puede caer a
-initramfs si `boot.scr` usa `root=/dev/mmcblk0p2`, porque Linux enumero la SD
-como `mmcblk1` y la eMMC como `mmcblk2`. Ver
-`notes/2026-05-25-sd-initramfs-root-device-name.md`.
+- SD y eMMC comparten los mismos `PARTUUID` (`800e6fd4-01` y `800e6fd4-02`).
+  Evitar `root=PARTUUID=...` mientras ambos medios esten presentes, salvo que
+  antes se regeneren identificadores.
+- El boot desde SD puede caer a initramfs si `boot.scr` usa
+  `root=/dev/mmcblk0p2`, porque Linux enumera SD como `mmcblk1` o `mmcblk0`
+  segun orden de probe. Usar `root=UUID=...`.
 
-Configuracion final:
+#### Configuracion DTS final
 
 ```dts
 &mmc2 {
@@ -250,16 +276,14 @@ Configuracion final:
 	vmmc-supply = <&reg_dcdc1>;
 	bus-width = <8>;
 	non-removable;
+	mmc-hs200-1.8v;
 	broken-cd;
 	disable-wp;
 	no-sd;
-	mmc-hs200-1.8v;
 	cap-mmc-hw-reset;
 	status = "okay";
 };
 ```
-
-Referencia: `notes/2026-05-25-emmc-debian12-install-uboot-blocker.md`.
 
 ### USB Type-A
 
@@ -429,15 +453,19 @@ picocom -b 115200 --databits 8 --parity n --stopbits 1 --flow n /dev/cu.usbseria
 - `notes/2026-05-21-inspeccion-imagenes-vendor.md`: referencia FEX/vendor para MMC, USB y AP6330.
 - `notes/2026-05-24-emmc-debian11-inspection.md`: inspeccion read-only de la eMMC Debian 11 y riesgos para migracion.
 - `notes/2026-05-25-emmc-debian12-install-uboot-blocker.md`: instalacion Debian 12 a eMMC y blocker U-Boot proper.
+- `notes/2026-05-26-emmc-boot-fix-clock-register.md`: root cause y fix del clock register bug.
+- `patches/2026-05-26-emmc-clock-register-fix.patch`: patch del fix.
+- `patches/2026-05-26-emmc-dts-mmc2-properties.patch`: patch DTS mmc2.
 
 ## Pendientes
 
 1. Bluetooth AP6330: instalar/configurar `bcm40183b2.hcd` y validar UART/GPIOs BT.
 2. Conectividad WiFi completa: instalar `wpasupplicant` o `iwd` y probar asociacion a red.
-3. eMMC boot: corregir U-Boot proper para que detecte eMMC/MMC al arrancar sin microSD; el rootfs Debian 12 ya fue instalado en eMMC.
-4. HDMI/VGA: probar salida de video.
-5. Capturar un boot log limpio completo con el DTB final, sin payloads de transferencia.
-6. Promover o guardar referencias FEX en `docs/device-tree/` como tabla FEX -> DTS.
+3. HDMI/VGA: probar salida de video.
+4. Capturar un boot log limpio completo con el DTB final, sin payloads de transferencia.
+5. Promover o guardar referencias FEX en `docs/device-tree/` como tabla FEX -> DTS.
+6. Reconstruir DTS source correspondiente al DTB final.
+7. Enviar patch upstream: typo `CONFIG_MACH_SUN9I_A80` en `drivers/mmc/sunxi_mmc.c` afecta todos los sun9i-A80.
 
 ## Estado de commits
 

@@ -2,31 +2,31 @@
 
 Bring-up and recovery repository for **Cubieboard4 / CC-A80 (Allwinner A80)**
 running Debian 12 armhf with a mainline kernel. The validated result is a
-microSD image that boots to shell with Ethernet, USB Type-A, and AP6330 WiFi
-working.
+microSD or eMMC image that boots to shell with Ethernet, USB Type-A, AP6330 WiFi,
+and eMMC boot working.
 
 Some investigation notes and raw logs are still in Spanish. The stable
 reproduction path is documented here in English.
 
 ## Validated Status
 
-Validated on real hardware on 2026-05-22:
+Validated on real hardware on 2026-05-26:
 
 | Subsystem | Status | Notes |
 |---|---|---|
-| microSD boot | Working | U-Boot loads `boot.scr`; Linux uses `mmcblk0p2` |
-| Debian 12 armhf | Working | Kernel `6.1.0-37-armmp` |
+| microSD boot | Working | U-Boot loads `boot.scr`; uses `root=UUID=...` |
+| eMMC boot (no SD) | Working | Fixed: `get_mclk_offset()` typo `CONFIG_MACH_SUN9I_A80` → `CONFIG_MACH_SUN9I` |
+| Debian 12 armhf | Working | Kernel `6.1.0-48-armmp` |
 | Ethernet | Working | RTL8211E, Gigabit Full Duplex link |
 | USB Type-A | Working | Internal `05e3:0608` hub; flash drive tested on all 4 ports |
 | AP6330 WiFi | Working | `wlan0` comes up and scans networks; BCM4330/4 |
-| eMMC | Partial | Linux sees the 7.30 GiB eMMC; Debian 12 can be installed to eMMC, but U-Boot proper does not detect MMC/eMMC when booting without microSD |
 | Bluetooth | Pending | Firmware/UART setup still needed |
 | VGA/HDMI | Pending | Not validated yet |
 | PowerVR G6230 GPU | No mainline acceleration | Public firmware for BVNC `1.75.2.30` is missing |
 
 Detailed evidence is available in
 [docs/estado-validado.md](docs/estado-validado.md) and
-[logs/2026-05-22-final-wifi-validation.log](logs/2026-05-22-final-wifi-validation.log).
+[notes/2026-05-26-emmc-boot-fix-clock-register.md](notes/2026-05-26-emmc-boot-fix-clock-register.md).
 
 ## Repository Contents
 
@@ -80,6 +80,7 @@ preserved assets from the GitHub Release `external-images-2026-05`:
 | `boot-cubieboard4.bin.gz` | Johan, mirrored in this repo release | Base boot/U-Boot image for Cubieboard4 |
 | `debian-bookworm-armhf-vim3ve.bin.gz` | Johan, mirrored in this repo release | Debian 12 armhf rootfs used during validation |
 | `dtb/sun9i-a80-cubieboard4.dtb` | This repository | Final validated DTB |
+| `u-boot-sunxi-with-spl-fixed.bin` | This repository | Fixed U-Boot (eMMC clock register, installed to /boot/) |
 | `fw_bcm40183b2_ag.bin` | Vendor/Linaro image | AP6330 WiFi firmware |
 | `nvram_ap6330.txt` | Vendor/Linaro image | AP6330 WiFi NVRAM |
 
@@ -115,9 +116,14 @@ sudo scripts/build-sd-image.sh \
 
 The script downloads the preserved assets from the GitHub Release
 `external-images-2026-05`, verifies SHA256 checksums, builds the SD image,
-installs the validated DTB, and copies the AP6330 firmware using the filenames
-expected by `brcmfmac`. It also regenerates `/boot/boot.scr` so the kernel uses
-`root=UUID=...` instead of a fragile `/dev/mmcblkNp2` device name.
+installs the validated DTB, the fixed U-Boot binary (`u-boot-sunxi-with-spl-fixed.bin`)
+to `/boot/u-boot-sunxi-with-spl.bin`, and copies the AP6330 firmware using the
+filenames expected by `brcmfmac`. It also regenerates `/boot/boot.scr` so the
+kernel uses `root=UUID=...` instead of a fragile `/dev/mmcblkNp2` device name.
+
+The fixed U-Boot is required for eMMC boot without SD. When running the
+install-to-emmc.sh script on the CB4, it will flash this binary from
+`/boot/u-boot-sunxi-with-spl.bin` to the eMMC at sector 16.
 
 Host requirements:
 
@@ -182,8 +188,10 @@ During validation, U-Boot loaded the DTB from the ext4 partition:
 /boot/sun9i-a80-cubieboard4.dtb
 ```
 
-The critical fix for stable boot is `broken-cd` on `mmc0`; without it, U-Boot
-SPL may start, but U-Boot/Linux can lose the SD card because of card-detect.
+The critical fixes for stable boot are:
+- `broken-cd` on `mmc0` — without it, U-Boot/Linux can lose the SD card.
+- `CONFIG_MACH_SUN9I` in `get_mclk_offset()` — without it, eMMC boot fails
+  because U-Boot proper writes MMC2 clock register to the wrong address.
 
 ## Install AP6330 WiFi Firmware
 
@@ -296,30 +304,46 @@ Expected results:
 
 ## Key Technical Changes
 
-The validated DTB fixes these points:
+### Device Tree fixes
+
+The validated DTB (`dtb/sun9i-a80-cubieboard4.dtb`) includes:
 
 - `mmc0`: SD with `broken-cd`.
 - `mmc1`: AP6330 over 4-bit SDIO, not eMMC.
-- `mmc2`: 8-bit eMMC.
+- `mmc2`: 8-bit eMMC with `mmc-hs200-1.8v`.
 - `usbphy1` and `usbphy3`: `phy-supply` connected to VBUS regulators.
 - `wifi_pwrseq`: AP6330 reset/power sequencing.
 - AP6330 firmware installed as `brcmfmac4330-sdio.*`.
 
 See DTS details in [docs/estado-validado.md](docs/estado-validado.md).
 
+### U-Boot fix: eMMC clock register
+
+**Root cause**: `get_mclk_offset()` in `drivers/mmc/sunxi_mmc.c` checked
+`CONFIG_MACH_SUN9I_A80` (does not exist) instead of `CONFIG_MACH_SUN9I`.
+U-Boot proper wrote MMC2 clock config to address `0x06000090` instead of
+`0x06000418`, corrupting CMD2 (ALL_CID) and preventing eMMC detection.
+
+**Fix**: `IS_ENABLED(CONFIG_MACH_SUN9I)` at line 649.
+
+**Result**: SPL (non-DM path) worked because it used `CCU_MMC2_CLK_CFG`
+directly; U-Boot proper (DM path) now gets the correct clock register offset
+and successfully initializes MMC2.
+
+See [notes/2026-05-26-emmc-boot-fix-clock-register.md](notes/2026-05-26-emmc-boot-fix-clock-register.md)
+for the full analysis.
+
 ## Pending Work
 
 - Add or reconstruct the DTS source corresponding to the final DTB.
-- Fix eMMC boot: SPL loads U-Boot from `MMC2`, but U-Boot proper reports
-  `MMC: no card present` and cannot read `/boot` from eMMC.
 - Validate VGA/HDMI.
 - Configure AP6330 Bluetooth.
-- Capture a clean full boot log with the final DTB.
+- Send U-Boot upstream patch: typo `CONFIG_MACH_SUN9I_A80` affects all sun9i-A80 boards.
 
-## eMMC Script
+## eMMC Install Script
 
 There is a conservative installer for copying the currently running SD system
-to eMMC:
+to eMMC and flashing the fixed U-Boot:
 
 ```sh
 sudo scripts/install-to-emmc.sh --backup-dir /media/usb
@@ -331,11 +355,16 @@ It runs in dry-run mode by default. To execute for real:
 sudo scripts/install-to-emmc.sh --backup-dir /media/usb --execute
 ```
 
-The script does not touch the raw bootloader area or `mmcblk1boot0/boot1`; it
-only replaces `/dev/mmcblk1p2`. It requires a backup directory and confirmation
-with `ERASE-EMMC`. The generated eMMC `boot.scr` uses `root=UUID=...` for the
-target rootfs instead of a fragile `/dev/mmcblkNp2` device name.
+The script auto-detects the source SD and target eMMC devices (no more
+hardcoded `/dev/mmcblk1`). It:
 
-In the real 2026-05-25 test, the copy to eMMC worked, but booting without
-microSD got stuck in U-Boot proper. See
-[notes/2026-05-25-emmc-debian12-install-uboot-blocker.md](notes/2026-05-25-emmc-debian12-install-uboot-blocker.md).
+1. Backs up the first 32 MiB of eMMC to the USB drive.
+2. Flashes `/boot/u-boot-sunxi-with-spl.bin` (the fixed binary, included in
+   the SD image by the builder) to the eMMC user area at **sector 16** (where
+   the A80 boot ROM reads it).
+3. Formats and copies the rootfs via `rsync` or `tar`.
+4. Generates a `boot.scr` with `root=UUID=...` using U-Boot's distro-boot
+   variables.
+
+The eMMC boot blocker (`MMC: no card present`) was resolved on 2026-05-26.
+See [notes/2026-05-26-emmc-boot-fix-clock-register.md](notes/2026-05-26-emmc-boot-fix-clock-register.md).

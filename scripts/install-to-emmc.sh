@@ -5,10 +5,11 @@ SELF="$(basename "$0")"
 
 DRY_RUN=1
 BACKUP_DIR=""
-TARGET_EMMC="/dev/mmcblk1"
-SOURCE_ROOT="/dev/mmcblk0p2"
+TARGET_EMMC=""
+SOURCE_ROOT=""
 MOUNTPOINT="/mnt/cb4-emmc-root"
 ASSUME_YES=0
+UBOOT_BIN="/boot/u-boot-sunxi-with-spl.bin"
 
 usage() {
 	cat <<EOF
@@ -20,23 +21,22 @@ Installs the currently running Cubieboard4 Debian 12 SD system to eMMC.
 Default mode is dry-run. No destructive action is performed unless --execute is
 passed and the confirmation prompt is answered with ERASE-EMMC.
 
-Expected layout:
-  source SD root:   /dev/mmcblk0p2
-  target eMMC disk: /dev/mmcblk1
-  target eMMC root: /dev/mmcblk1p2
+The script auto-detects the source SD root and target eMMC disk by scanning
+MMC devices.
 
-The script intentionally does not write the raw eMMC bootloader area or
-/dev/mmcblk1boot0/boot1. It preserves the existing eMMC bootloader and replaces
-only the root filesystem partition.
+The script also flashes a rebuilt U-Boot to the main eMMC user area at
+sector 16 (offset 8KB), which is where the A80 boot ROM reads it.
 
 Options:
   --backup-dir DIR   Directory where eMMC metadata/backups will be written.
                      For --execute this must live on a mounted USB drive.
-  --execute          Actually format /dev/mmcblk1p2 and install to eMMC.
+  --execute          Actually format eMMC root partition and install.
   --yes              Skip interactive prompt; requires --execute.
-  --target DEV       Target eMMC disk, default: /dev/mmcblk1.
-  --source-root DEV  Source root partition, default: /dev/mmcblk0p2.
+  --target DEV       Target eMMC disk (auto-detected if omitted).
+  --source-root DEV  Source root partition (auto-detected if omitted).
   --mountpoint DIR   Temporary mountpoint, default: /mnt/cb4-emmc-root.
+  --uboot-bin PATH   Path to u-boot-sunxi-with-spl.bin, default:
+                     /boot/u-boot-sunxi-with-spl.bin.
   -h, --help         Show this help.
 EOF
 }
@@ -63,6 +63,52 @@ require_cmd() {
 
 resolve_source() {
 	findmnt -n -o SOURCE /
+}
+
+# Detect the eMMC block device (non-removable MMC that isn't the SD source)
+detect_emmc() {
+	local source_disk="$1"
+	local dev
+	local disk
+	local removable
+
+	for dev in /dev/mmcblk*; do
+		[ -b "$dev" ] || continue
+		[ "${dev#/dev/mmcblk[0-9]}" != "$dev" ] && [ "$dev" = "${dev%p*}" ] || continue
+		# Skip partitions, only check disks
+		case "$(basename "$dev")" in
+			mmcblk[0-9]) ;;
+			*) continue ;;
+		esac
+		[ "$dev" = "$source_disk" ] && continue
+		removable="$(cat "/sys/block/$(basename "$dev")/removable" 2>/dev/null || echo 1)"
+		[ "$removable" = "0" ] || continue
+		printf '%s\n' "$dev"
+		return 0
+	done
+
+	# Fallback: find MMC device (type "MMC") not matching source
+	for dev in /dev/mmcblk[0-9]; do
+		[ -b "$dev" ] || continue
+		[ "$dev" = "$source_disk" ] && continue
+		local mmctype
+		mmctype="$(cat "/sys/block/$(basename "$dev")/device/type" 2>/dev/null || true)"
+		[ "$mmctype" = "MMC" ] || continue
+		printf '%s\n' "$dev"
+		return 0
+	done
+
+	return 1
+}
+
+# Resolve the disk device for a partition
+disk_for_part() {
+	local part="$1"
+	local name
+	local pkname
+	name="$(basename "$part")"
+	pkname="$(lsblk -n -o PKNAME "$part" 2>/dev/null | head -n1 || true)"
+	[ -n "$pkname" ] && printf '/dev/%s\n' "$pkname" || return 1
 }
 
 partition_start() {
@@ -199,6 +245,11 @@ while [ "$#" -gt 0 ]; do
 			MOUNTPOINT="$2"
 			shift 2
 			;;
+		--uboot-bin)
+			[ "$#" -ge 2 ] || die "--uboot-bin requires a value"
+			UBOOT_BIN="$2"
+			shift 2
+			;;
 		-h|--help)
 			usage
 			exit 0
@@ -211,9 +262,6 @@ done
 
 [ "$(id -u)" -eq 0 ] || die "run as root on the Cubieboard4"
 [ "$(uname -s)" = "Linux" ] || die "this installer must run on Linux"
-
-TARGET_ROOT="${TARGET_EMMC}p2"
-TARGET_BOOT="${TARGET_EMMC}p1"
 
 require_cmd findmnt
 require_cmd lsblk
@@ -232,13 +280,30 @@ else
 	COPY_METHOD="tar"
 fi
 
+# Resolve source root
+if [ -z "$SOURCE_ROOT" ]; then
+	SOURCE_ROOT="$(resolve_source)"
+fi
 [ -b "$SOURCE_ROOT" ] || die "source root partition not found: $SOURCE_ROOT"
-[ -b "$TARGET_EMMC" ] || die "target eMMC disk not found: $TARGET_EMMC"
-[ -b "$TARGET_ROOT" ] || die "target eMMC root partition not found: $TARGET_ROOT"
-[ -b "$TARGET_BOOT" ] || die "target eMMC boot partition not found: $TARGET_BOOT"
 
 CURRENT_ROOT="$(resolve_source)"
 [ "$CURRENT_ROOT" = "$SOURCE_ROOT" ] || die "expected / to be mounted from $SOURCE_ROOT, got $CURRENT_ROOT"
+
+SOURCE_DISK="$(disk_for_part "$SOURCE_ROOT")"
+[ -n "$SOURCE_DISK" ] || die "cannot resolve source disk for: $SOURCE_ROOT"
+
+# Resolve target eMMC
+if [ -z "$TARGET_EMMC" ]; then
+	TARGET_EMMC="$(detect_emmc "$SOURCE_DISK")"
+	[ -n "$TARGET_EMMC" ] || die "cannot auto-detect eMMC device; specify --target manually"
+fi
+[ -b "$TARGET_EMMC" ] || die "target eMMC disk not found: $TARGET_EMMC"
+
+TARGET_ROOT="${TARGET_EMMC}p2"
+TARGET_BOOT="${TARGET_EMMC}p1"
+
+[ -b "$TARGET_ROOT" ] || die "target eMMC root partition not found: $TARGET_ROOT"
+[ -b "$TARGET_BOOT" ] || die "target eMMC boot partition not found: $TARGET_BOOT"
 
 [ -n "$BACKUP_DIR" ] || die "--backup-dir is required"
 mkdir -p "$BACKUP_DIR"
@@ -254,6 +319,7 @@ DTB_IMAGE="/boot/sun9i-a80-cubieboard4.dtb"
 [ -f "$KERNEL_IMAGE" ] || die "kernel image not found: $KERNEL_IMAGE"
 [ -f "$INITRD_IMAGE" ] || die "initrd image not found: $INITRD_IMAGE"
 [ -f "$DTB_IMAGE" ] || die "validated DTB not found: $DTB_IMAGE"
+[ -f "$UBOOT_BIN" ] || die "U-Boot binary not found: $UBOOT_BIN"
 
 if findmnt -n "$TARGET_ROOT" >/dev/null 2>&1; then
 	die "$TARGET_ROOT is already mounted"
@@ -263,21 +329,20 @@ cat <<EOF
 Cubieboard4 eMMC installer
 
 Current root:       $CURRENT_ROOT
+Source disk:        $SOURCE_DISK
 Target eMMC disk:   $TARGET_EMMC
 Target rootfs:      $TARGET_ROOT
 Target boot part:   $TARGET_BOOT
+U-Boot binary:      $UBOOT_BIN
 Kernel:             $KERNEL_VERSION
 Backup directory:   $BACKUP_DIR
 Copy method:        $COPY_METHOD
 Mode:               $([ "$DRY_RUN" -eq 1 ] && echo dry-run || echo execute)
 
-This will preserve the raw eMMC bootloader area but will erase and replace:
-  $TARGET_ROOT
-
-It will not write:
-  $TARGET_EMMC raw disk
-  ${TARGET_EMMC}boot0
-  ${TARGET_EMMC}boot1
+This will:
+  - flash $UBOOT_BIN to $TARGET_EMMC at sector 16 (A80 boot ROM offset)
+  - erase and replace $TARGET_ROOT
+  - preserve $TARGET_BOOT (FAT partition)
 EOF
 
 if [ "$DRY_RUN" -eq 0 ] && [ "$ASSUME_YES" -eq 0 ]; then
@@ -298,6 +363,10 @@ else
 	log "+ sha256sum ${BACKUP_PREFIX}-first-32m.bin >${BACKUP_PREFIX}-first-32m.sha256"
 	log "+ dump partition layout >${BACKUP_PREFIX}-layout.txt"
 fi
+
+log
+log "Flashing U-Boot to $TARGET_EMMC at sector 16 (A80 boot ROM offset)..."
+run dd "if=$UBOOT_BIN" "of=$TARGET_EMMC" bs=512 seek=16 conv=fsync
 
 log
 log "Formatting eMMC root partition..."
@@ -353,8 +422,6 @@ if [ "$DRY_RUN" -eq 0 ]; then
 	[ -n "$TARGET_ROOT_UUID" ] || die "cannot determine target root UUID for: $TARGET_ROOT"
 	TARGET_ROOT_SPEC="UUID=$TARGET_ROOT_UUID"
 	cat >"$BOOT_CMD" <<EOF
-setenv devtype mmc
-setenv devnum 1
 load \${devtype} \${devnum}:\${distro_bootpart} \${kernel_addr_r} /boot/vmlinuz-${KERNEL_VERSION}
 load \${devtype} \${devnum}:\${distro_bootpart} \${ramdisk_addr_r} /boot/initrd.img-${KERNEL_VERSION}
 setenv ramdisk_size \${filesize}
@@ -364,13 +431,14 @@ bootz \${kernel_addr_r} \${ramdisk_addr_r}:\${ramdisk_size} \${fdt_addr_r}
 EOF
 	mkimage -C none -A arm -T script -d "$BOOT_CMD" "$MOUNTPOINT/boot/boot.scr"
 else
-	log "+ write $BOOT_CMD for devnum 1 and root=$TARGET_ROOT_SPEC"
+	log "+ write $BOOT_CMD (uses distro auto-discovered devnum/devtype) root=$TARGET_ROOT_SPEC"
 	log "+ mkimage -C none -A arm -T script -d $BOOT_CMD $MOUNTPOINT/boot/boot.scr"
 fi
 
 log
 log "Final verification..."
 if [ "$DRY_RUN" -eq 0 ]; then
+	dd "if=$TARGET_EMMC" bs=4 skip=16 count=1 2>/dev/null | grep -q 'eGON' || die "U-Boot flash verification failed: eGON signature not found at sector 16 of $TARGET_EMMC"
 	test -f "$MOUNTPOINT/boot/vmlinuz-${KERNEL_VERSION}"
 	test -f "$MOUNTPOINT/boot/initrd.img-${KERNEL_VERSION}"
 	test -f "$MOUNTPOINT/boot/sun9i-a80-cubieboard4.dtb"
@@ -392,4 +460,8 @@ Next validation step:
 
 Expected eMMC boot root:
   $TARGET_ROOT_SPEC
+
+U-Boot flashed at sector 16 with the get_mclk_offset fix
+(CONFIG_MACH_SUN9I instead of CONFIG_MACH_SUN9I_A80).
+See notes/2026-05-26-emmc-boot-fix-clock-register.md for details.
 EOF

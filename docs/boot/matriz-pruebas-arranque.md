@@ -29,6 +29,7 @@ Registrar cada intento de boot con contexto suficiente para:
 | 2026-05-25 | Bookworm copiado desde SD a eMMC | 6.1.0-37-armmp | 2025.07-rc4-dirty | eMMC sin microSD | sun9i-a80-cubieboard4 (DTB copiado en rootfs eMMC) | ⚠️ PARCIAL | No llega a kernel | SPL carga U-Boot desde `MMC2`, pero U-Boot proper reporta `MMC: no card present` y no puede leer `/boot` desde eMMC. Rootfs eMMC instalado OK. | `notes/2026-05-25-emmc-debian12-install-uboot-blocker.md` |
 | 2026-05-25 | Bookworm SD con eMMC presente tras instalacion | 6.1.0-37-armmp | 2025.04 johang | microSD + eMMC | `dtb/sun9i-a80-cubieboard4.dtb` | ⚠️ PARCIAL | ~35s hasta initramfs | `boot.scr` usaba `root=/dev/mmcblk0p2`, pero Linux enumero SD como `mmcblk1` y eMMC como `mmcblk2`. Solucion: usar `root=UUID=...`. | `notes/2026-05-25-sd-initramfs-root-device-name.md` |
 | 2026-05-25 | Bookworm SD con `boot.scr` corregido | 6.1.0-37-armmp | 2025.04 johang | microSD + eMMC | `dtb/sun9i-a80-cubieboard4.dtb` | ✅ OK | ~35s | Boot automatico hasta login usando `root=UUID=66c76c3a-4c75-4bb3-9665-dbb0dce7649e`; ya no depende de `mmcblkN`. | `notes/2026-05-25-sd-initramfs-root-device-name.md` |
+| 2026-05-26 | Bookworm eMMC | 6.1.0-48-armmp | 2025.07-rc4 | eMMC sin microSD | `dtb/sun9i-a80-cubieboard4.dtb` + U-Boot DTS fix | ✅ OK | ~35s | eMMC boot sin SD resuelto. Root cause: `get_mclk_offset()` chequeaba `CONFIG_MACH_SUN9I_A80` (no existe) en vez de `CONFIG_MACH_SUN9I`. | `notes/2026-05-26-emmc-boot-fix-clock-register.md` |
 
 ## Criterios de estado
 
