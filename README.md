@@ -47,7 +47,12 @@ The image inventory, mirrors, and SHA256 checksums are documented in
 
 ## Johan Base Images
 
-Johan Ahlberg maintains vanilla Debian/Ubuntu SD-card images for Cubieboard4:
+Many thanks to **Johan Ahlberg** ([johang](https://github.com/johang)) — his
+SD-card images are the foundation this work is built on. Without his tooling
+and pre-built Debian/Ubuntu images for the Cubieboard4, this project would not
+exist.
+
+Johan maintains vanilla Debian/Ubuntu SD-card images for Cubieboard4:
 
 ```text
 https://sd-card-images.johang.se/boards/cubieboard4.html
