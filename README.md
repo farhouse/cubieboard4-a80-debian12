@@ -30,6 +30,9 @@ Detailed evidence is available in
 
 ## Repository Contents
 
+- [dts/sun9i-a80-cubieboard4.dts](dts/sun9i-a80-cubieboard4.dts): validated
+  DTS source (decompiled from the final DTB). Compile with
+  `dtc -I dts -O dtb -o dtb/sun9i-a80-cubieboard4.dtb dts/sun9i-a80-cubieboard4.dts`.
 - [dtb/sun9i-a80-cubieboard4.dtb](dtb/sun9i-a80-cubieboard4.dtb): validated
   DTB for SD boot, USB Type-A, eMMC detection, and AP6330 SDIO WiFi.
 - [scripts/build-sd-image.sh](scripts/build-sd-image.sh): reproducible SD
@@ -340,7 +343,6 @@ for the full analysis.
 
 ## Pending Work
 
-- Add or reconstruct the DTS source corresponding to the final DTB.
 - Validate VGA/HDMI.
 - Configure AP6330 Bluetooth.
 - Send U-Boot upstream patch: typo `CONFIG_MACH_SUN9I_A80` affects all sun9i-A80 boards.
