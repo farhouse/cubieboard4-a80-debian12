@@ -273,6 +273,7 @@ require_cmd mount
 require_cmd umount
 require_cmd mkimage
 require_cmd tar
+require_cmd parted
 
 if command -v rsync >/dev/null 2>&1; then
 	COPY_METHOD="rsync"
@@ -341,6 +342,7 @@ Mode:               $([ "$DRY_RUN" -eq 1 ] && echo dry-run || echo execute)
 
 This will:
   - flash $UBOOT_BIN to $TARGET_EMMC at sector 16 (A80 boot ROM offset)
+  - resize $TARGET_ROOT to fill the full eMMC
   - erase and replace $TARGET_ROOT
   - preserve $TARGET_BOOT (FAT partition)
 EOF
@@ -367,6 +369,18 @@ fi
 log
 log "Flashing U-Boot to $TARGET_EMMC at sector 16 (A80 boot ROM offset)..."
 run dd "if=$UBOOT_BIN" "of=$TARGET_EMMC" bs=512 seek=16 conv=fsync
+
+log
+log "Resizing root partition to fill remaining eMMC space..."
+TARGET_ROOT_PARTNO="${TARGET_ROOT##*p}"
+EMMC_SIZE="$(cat "/sys/block/$(basename "$TARGET_EMMC")/size")"
+TARGET_BOOT_START="$(cat "/sys/block/$(basename "$TARGET_BOOT")/start")"
+TARGET_ROOT_START="$(cat "/sys/block/$(basename "$TARGET_ROOT")/start")"
+# Align end to sector boundary (1 MiB = 2048 sectors)
+ALIGN_SECTORS=2048
+ROOT_END_SECTOR=$(( (EMMC_SIZE / ALIGN_SECTORS) * ALIGN_SECTORS - 1 ))
+run parted -s "$TARGET_EMMC" "resizepart $TARGET_ROOT_PARTNO ${ROOT_END_SECTOR}s"
+run partprobe "$TARGET_EMMC" 2>/dev/null || true
 
 log
 log "Formatting eMMC root partition..."
