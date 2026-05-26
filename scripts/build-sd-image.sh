@@ -337,6 +337,9 @@ download_asset "$UBOOT_FIX_ASSET"
 verify_sha256 "$CACHE_DIR/$UBOOT_FIX_ASSET" "$UBOOT_FIX_SHA256"
 install -D -m 0644 "$CACHE_DIR/$UBOOT_FIX_ASSET" "$ROOT_MOUNT/boot/u-boot-sunxi-with-spl.bin"
 
+log "Installing install-to-emmc.sh to /root/"
+install -D -m 0755 "$(dirname "$0")/install-to-emmc.sh" "$ROOT_MOUNT/root/install-to-emmc.sh"
+
 write_sd_boot_script "$root_part" "$ROOT_MOUNT"
 
 if [ "$WITH_FIRMWARE" -eq 1 ]; then
