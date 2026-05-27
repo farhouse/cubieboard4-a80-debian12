@@ -336,6 +336,8 @@ mkdir -p "$CACHE_DIR"
 log "=== Cubieboard4 A80 Debian 12 SD Image Builder ==="
 log ""
 
+log ""
+log "Assets status:"
 missing=0
 check_asset() {
 	local label="$1"
@@ -382,12 +384,15 @@ ROOT_MOUNT="$WORK_DIR/mnt-root"
 mkdir -p "$ROOT_MOUNT" "$(dirname "$OUTPUT")"
 trap cleanup EXIT
 
+log "--- Downloading assets ---"
 download_asset "$BOOT_ASSET"
 download_asset "$ROOTFS_ASSET"
 verify_sha256 "$CACHE_DIR/$BOOT_ASSET" "$BOOT_SHA256"
 verify_sha256 "$CACHE_DIR/$ROOTFS_ASSET" "$ROOTFS_SHA256"
 
-log "Building SD image: $OUTPUT"
+log ""
+log "--- Building SD image ---"
+log "Creating image: $OUTPUT"
 rm -f "$OUTPUT"
 gzip -dc "$CACHE_DIR/$BOOT_ASSET" >"$OUTPUT"
 gzip -dc "$CACHE_DIR/$ROOTFS_ASSET" >>"$OUTPUT"
@@ -398,6 +403,8 @@ root_part="$(partition_path "$IMAGE_LOOP" 2)"
 log "Mounting generated rootfs: $root_part"
 mount "$root_part" "$ROOT_MOUNT"
 
+log ""
+log "--- Patching image ---"
 log "Installing validated DTB"
 install -D -m 0644 "$DTB" "$ROOT_MOUNT/boot/sun9i-a80-cubieboard4.dtb"
 
