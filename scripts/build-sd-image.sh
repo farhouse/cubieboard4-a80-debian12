@@ -75,235 +75,28 @@ die() {
 }
 
 require_cmd() {
-	command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"
-}
-
-cleanup() {
-	set +e
-	if [ -n "$ROOT_MOUNT" ] && mountpoint -q "$ROOT_MOUNT"; then
-		umount "$ROOT_MOUNT"
-	fi
-	if [ -n "$VENDOR_MOUNT" ] && mountpoint -q "$VENDOR_MOUNT"; then
-		umount "$VENDOR_MOUNT"
-	fi
-	if [ -n "$IMAGE_LOOP" ]; then
-		losetup -d "$IMAGE_LOOP" >/dev/null 2>&1
-	fi
-	if [ -n "$VENDOR_LOOP" ]; then
-		losetup -d "$VENDOR_LOOP" >/dev/null 2>&1
+	local cmd="$1"
+	local pkg="${2:-}"
+	if ! command -v "$cmd" >/dev/null 2>&1; then
+		if [ -n "$pkg" ]; then
+			die "required command not found: $cmd (install with: apt install $pkg)"
+		else
+			die "required command not found: $cmd"
+		fi
 	fi
 }
 
-download_asset() {
-	local asset="$1"
-	local dest="$CACHE_DIR/$asset"
-	local url="$RELEASE_BASE/$asset"
-
-	if [ -f "$dest" ]; then
-		log "Using cached asset: $dest"
-		return
-	fi
-
-	[ "$DOWNLOAD" -eq 1 ] || die "missing cached asset and --skip-download was used: $dest"
-
-	log "Downloading: $url"
-	if command -v curl >/dev/null 2>&1; then
-		curl -L --fail --output "$dest.tmp" "$url"
-	elif command -v wget >/dev/null 2>&1; then
-		wget -O "$dest.tmp" "$url"
-	else
-		die "required command not found: curl or wget"
-	fi
-	mv "$dest.tmp" "$dest"
-}
-
-verify_sha256() {
-	local file="$1"
-	local expected="$2"
-
-	log "Verifying SHA256: $file"
-	printf '%s  %s\n' "$expected" "$file" | sha256sum -c -
-}
-
-attach_loop() {
-	local image="$1"
-	local loopdev
-
-	loopdev="$(losetup --find --partscan --show "$image")"
-	if command -v udevadm >/dev/null 2>&1; then
-		udevadm settle
-	fi
-	printf '%s\n' "$loopdev"
-}
-
-partition_path() {
-	local loopdev="$1"
-	local partno="$2"
-
-	if [ -b "${loopdev}p${partno}" ]; then
-		printf '%s\n' "${loopdev}p${partno}"
-	elif [ -b "${loopdev}${partno}" ]; then
-		printf '%s\n' "${loopdev}${partno}"
-	else
-		die "partition ${partno} not found for loop device: $loopdev"
-	fi
-}
-
-copy_ap6330_firmware() {
-	local src_dir="$1"
-	local target_dir="$2/lib/firmware/brcm"
-	local fw_bin="$src_dir/fw_bcm40183b2_ag.bin"
-	local fw_txt="$src_dir/nvram_ap6330.txt"
-
-	[ -f "$fw_bin" ] || die "missing AP6330 firmware: $fw_bin"
-	[ -f "$fw_txt" ] || die "missing AP6330 NVRAM: $fw_txt"
-
-	log "Installing AP6330 WiFi firmware"
-	install -d "$target_dir"
-	install -m 0644 "$fw_bin" "$target_dir/brcmfmac4330-sdio.bin"
-	install -m 0644 "$fw_txt" "$target_dir/brcmfmac4330-sdio.txt"
-}
-
-detect_kernel_version() {
-	local boot_dir="$1/boot"
-	local kernel=""
-	local path
-
-	for path in "$boot_dir"/vmlinuz-*; do
-		[ -f "$path" ] || continue
-		kernel="$(basename "$path")"
-	done
-
-	[ -n "$kernel" ] || die "could not find kernel image in: $boot_dir"
-	printf '%s\n' "${kernel#vmlinuz-}"
-}
-
-write_sd_boot_script() {
-	local root_part="$1"
-	local root_mount="$2"
-	local root_uuid
-	local kernel_version
-	local boot_cmd="$root_mount/boot/boot.cmd"
-
-	root_uuid="$(blkid -s UUID -o value "$root_part")"
-	[ -n "$root_uuid" ] || die "could not determine rootfs UUID for: $root_part"
-	kernel_version="$(detect_kernel_version "$root_mount")"
-
-	log "Writing SD boot script with root=UUID=$root_uuid"
-	cat >"$boot_cmd" <<EOF
-setenv devtype mmc
-load \${devtype} \${devnum}:\${distro_bootpart} \${kernel_addr_r} /boot/vmlinuz-${kernel_version}
-load \${devtype} \${devnum}:\${distro_bootpart} \${ramdisk_addr_r} /boot/initrd.img-${kernel_version}
-setenv ramdisk_size \${filesize}
-setenv bootargs root=UUID=${root_uuid} rw rootwait
-load \${devtype} \${devnum}:\${distro_bootpart} \${fdt_addr_r} /boot/sun9i-a80-cubieboard4.dtb
-bootz \${kernel_addr_r} \${ramdisk_addr_r}:\${ramdisk_size} \${fdt_addr_r}
-EOF
-	mkimage -C none -A arm -T script -d "$boot_cmd" "$root_mount/boot/boot.scr"
-}
-
-validate_output_path() {
-	case "$OUTPUT" in
-		/dev/*)
-			die "--output must be an image file path, not a block device: $OUTPUT"
-			;;
-	esac
-
-	[ ! -b "$OUTPUT" ] || die "--output points to a block device: $OUTPUT"
-	[ ! -d "$OUTPUT" ] || die "--output points to a directory: $OUTPUT"
-	[ ! -L "$OUTPUT" ] || die "--output must not be a symlink: $OUTPUT"
-	if [ -e "$OUTPUT" ] && [ ! -f "$OUTPUT" ]; then
-		die "--output exists but is not a regular file: $OUTPUT"
-	fi
-}
-
-extract_vendor_firmware() {
-	local archive="$CACHE_DIR/$VENDOR_SD_ASSET"
-	local extract_dir="$WORK_DIR/vendor-sd"
-	local vendor_img="$extract_dir/cb4-debian-server-hdmi-card-v1.0.img"
-	local vendor_root
-
-	require_cmd 7z
-
-	download_asset "$VENDOR_SD_ASSET"
-	verify_sha256 "$archive" "$VENDOR_SD_SHA256"
-
-	if [ ! -f "$vendor_img" ]; then
-		log "Extracting vendor SD image"
-		mkdir -p "$extract_dir"
-		7z x -y "-o$extract_dir" "$archive"
-	fi
-
-	[ -f "$vendor_img" ] || die "vendor image not found after extraction: $vendor_img"
-
-	VENDOR_MOUNT="$WORK_DIR/mnt-vendor"
-	mkdir -p "$VENDOR_MOUNT"
-	VENDOR_LOOP="$(attach_loop "$vendor_img")"
-	vendor_root="$(partition_path "$VENDOR_LOOP" 2)"
-	log "Mounting vendor rootfs: $vendor_root"
-	mount -o ro "$vendor_root" "$VENDOR_MOUNT"
-
-	copy_ap6330_firmware "$VENDOR_MOUNT/lib/firmware/ap6330" "$ROOT_MOUNT"
-}
-
-while [ "$#" -gt 0 ]; do
-	case "$1" in
-		--output)
-			[ "$#" -ge 2 ] || die "--output requires a value"
-			OUTPUT="$2"
-			shift 2
-			;;
-		--work-dir)
-			[ "$#" -ge 2 ] || die "--work-dir requires a value"
-			WORK_DIR="$2"
-			shift 2
-			;;
-		--release-base)
-			[ "$#" -ge 2 ] || die "--release-base requires a value"
-			RELEASE_BASE="${2%/}"
-			shift 2
-			;;
-		--dtb)
-			[ "$#" -ge 2 ] || die "--dtb requires a value"
-			DTB="$2"
-			shift 2
-			;;
-		--firmware-dir)
-			[ "$#" -ge 2 ] || die "--firmware-dir requires a value"
-			FIRMWARE_DIR="$2"
-			shift 2
-			;;
-		--no-firmware)
-			WITH_FIRMWARE=0
-			shift
-			;;
-		--skip-download)
-			DOWNLOAD=0
-			shift
-			;;
-		-h|--help)
-			usage
-			exit 0
-			;;
-		*)
-			die "unknown argument: $1"
-			;;
-	esac
-done
-
-[ "$(uname -s)" = "Linux" ] || die "this image builder must run on Linux"
-[ "$(id -u)" -eq 0 ] || die "run as root; loop mount is required"
-
-require_cmd blkid
-require_cmd gzip
-require_cmd install
-require_cmd losetup
-require_cmd mkimage
-require_cmd mount
-require_cmd mountpoint
-require_cmd sha256sum
-require_cmd sync
-require_cmd umount
+require_cmd blkid         util-linux
+require_cmd curl
+require_cmd gzip          gzip
+require_cmd install       coreutils
+require_cmd losetup       util-linux
+require_cmd mkimage       u-boot-tools
+require_cmd mount         mount
+require_cmd mountpoint    mount
+require_cmd sha256sum     coreutils
+require_cmd sync          coreutils
+require_cmd umount        mount
 
 CACHE_DIR="$WORK_DIR/cache"
 mkdir -p "$CACHE_DIR"
