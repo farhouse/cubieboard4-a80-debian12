@@ -79,7 +79,8 @@ require_cmd() {
 	local pkg="${2:-}"
 	if ! command -v "$cmd" >/dev/null 2>&1; then
 		if [ -n "$pkg" ]; then
-			die "required command not found: $cmd (install with: apt install $pkg)"
+			log "Missing: $cmd (package: $pkg)"
+			missing_pkgs="$missing_pkgs $pkg"
 		else
 			die "required command not found: $cmd"
 		fi
@@ -302,8 +303,9 @@ done
 [ "$(uname -s)" = "Linux" ] || die "this image builder must run on Linux"
 [ "$(id -u)" -eq 0 ] || die "run as root; loop mount is required"
 
+missing_pkgs=""
 require_cmd blkid         util-linux
-require_cmd curl
+require_cmd curl          curl
 require_cmd gzip          gzip
 require_cmd install       coreutils
 require_cmd losetup       util-linux
@@ -313,6 +315,20 @@ require_cmd mountpoint    mount
 require_cmd sha256sum     coreutils
 require_cmd sync          coreutils
 require_cmd umount        mount
+
+if [ "$WITH_FIRMWARE" -eq 1 ] && [ -z "$FIRMWARE_DIR" ]; then
+	require_cmd 7z  p7zip-full
+fi
+
+if [ -n "$missing_pkgs" ]; then
+	log "Missing packages:$missing_pkgs"
+	read -r -p "Install them with apt? [Y/n] " reply
+	case "$reply" in
+		[nN]*) die "install required packages manually: apt install$missing_pkgs" ;;
+	esac
+	# shellcheck disable=SC2086
+	apt update && apt install -y $missing_pkgs
+fi
 
 CACHE_DIR="$WORK_DIR/cache"
 mkdir -p "$CACHE_DIR"
