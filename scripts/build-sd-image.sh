@@ -4,6 +4,7 @@ set -euo pipefail
 SELF="$(basename "$0")"
 
 RELEASE_BASE="https://github.com/farhouse/cubieboard4-a80-debian12/releases/download/external-images-2026-05"
+RAW_BASE="https://raw.githubusercontent.com/farhouse/cubieboard4-a80-debian12/main"
 WORK_DIR="build/sd-image"
 OUTPUT=""
 DTB="dtb/sun9i-a80-cubieboard4.dtb"
@@ -346,7 +347,14 @@ verify_sha256 "$CACHE_DIR/$UBOOT_FIX_ASSET" "$UBOOT_FIX_SHA256"
 install -D -m 0644 "$CACHE_DIR/$UBOOT_FIX_ASSET" "$ROOT_MOUNT/boot/u-boot-sunxi-with-spl.bin"
 
 log "Installing install-to-emmc.sh to /root/"
-install -D -m 0755 "$(dirname "$0")/install-to-emmc.sh" "$ROOT_MOUNT/root/install-to-emmc.sh"
+if [ -f "$(dirname "$0")/install-to-emmc.sh" ]; then
+	install -D -m 0755 "$(dirname "$0")/install-to-emmc.sh" "$ROOT_MOUNT/root/install-to-emmc.sh"
+else
+	log "Downloading install-to-emmc.sh from upstream"
+	curl -sL --fail "$RAW_BASE/scripts/install-to-emmc.sh" \
+		-o "$ROOT_MOUNT/root/install-to-emmc.sh"
+	chmod 0755 "$ROOT_MOUNT/root/install-to-emmc.sh"
+fi
 
 write_sd_boot_script "$root_part" "$ROOT_MOUNT"
 
