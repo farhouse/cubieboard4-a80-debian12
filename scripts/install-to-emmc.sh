@@ -57,8 +57,19 @@ run() {
 	fi
 }
 
+missing_pkgs=""
+
 require_cmd() {
-	command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"
+	local cmd="$1"
+	local pkg="${2:-}"
+	if ! command -v "$cmd" >/dev/null 2>&1; then
+		if [ -n "$pkg" ]; then
+			log "Missing: $cmd (package: $pkg)"
+			missing_pkgs="$missing_pkgs $pkg"
+		else
+			die "required command not found: $cmd"
+		fi
+	fi
 }
 
 resolve_source() {
@@ -263,17 +274,26 @@ done
 [ "$(id -u)" -eq 0 ] || die "run as root on the Cubieboard4"
 [ "$(uname -s)" = "Linux" ] || die "this installer must run on Linux"
 
-require_cmd findmnt
-require_cmd lsblk
-require_cmd blkid
-require_cmd dd
-require_cmd sha256sum
-require_cmd mkfs.ext4
-require_cmd mount
-require_cmd umount
-require_cmd mkimage
-require_cmd tar
-require_cmd parted
+require_cmd findmnt       util-linux
+require_cmd lsblk         util-linux
+require_cmd blkid         util-linux
+require_cmd dd            coreutils
+require_cmd sha256sum     coreutils
+require_cmd mkfs.ext4     e2fsprogs
+require_cmd mount         mount
+require_cmd umount        mount
+require_cmd mkimage       u-boot-tools
+require_cmd tar           tar
+require_cmd parted        parted
+
+if [ -n "$missing_pkgs" ]; then
+	log "Missing packages:$missing_pkgs"
+	read -r -p "Install them with apt? [Y/n] " reply </dev/tty
+	case "$reply" in
+		[nN]*) die "install required packages manually: apt install$missing_pkgs" ;;
+	esac
+	apt update && apt install -y $missing_pkgs
+fi
 
 if command -v rsync >/dev/null 2>&1; then
 	COPY_METHOD="rsync"
