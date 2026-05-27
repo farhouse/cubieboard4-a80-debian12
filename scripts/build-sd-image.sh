@@ -458,7 +458,7 @@ case "$reply" in
 	[yY]*)
 		log ""
 		log "Available disks (exclude the one with / mount):"
-		lsblk -dno NAME,SIZE,MODEL,TRAN | grep -v loop
+		lsblk -dno NAME,SIZE,MODEL | grep -v '^loop'
 		log ""
 		log "Enter the device path (e.g. /dev/sdb):"
 		read -r sd_dev </dev/tty
