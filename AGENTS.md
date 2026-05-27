@@ -71,6 +71,7 @@ Estabilizar el boot de Cubieboard4 A80 con Debian 12 desde microSD, lograr image
 4. **Reconstruir DTS source** correspondiente al DTB final.
 5. **GPU/display** (postergado): PowerVR G6230 sin firmware público para BVNC 1.75.2.30; HDMI no declarado en DTS mainline.
 6. **Enviar patch upstream**: typo `CONFIG_MACH_SUN9I_A80` afecta todos los sun9i-A80.
+7. **Validar con imágenes nuevas de Johan**: probar si la última imagen de Johan (2026-05-25+) también funciona con el builder sin cambios.
 
 ### Key Reference Files
 - `dtb/sun9i-a80-cubieboard4.dtb` — DTB final validado.
