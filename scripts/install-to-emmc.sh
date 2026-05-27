@@ -1,501 +1,874 @@
 #!/usr/bin/env bash
+# install-to-emmc.sh — Interactive wizard for SD→eMMC install on Cubieboard4 A80
 set -euo pipefail
 
+# ── Config ────────────────────────────────────────────────────
 SELF="$(basename "$0")"
-
-DRY_RUN=1
-BACKUP_DIR=""
-TARGET_EMMC=""
-SOURCE_ROOT=""
 MOUNTPOINT="/mnt/cb4-emmc-root"
-ASSUME_YES=0
-UBOOT_BIN="/boot/u-boot-sunxi-with-spl.bin"
+UBOOT_BIN_DEFAULT="/boot/u-boot-sunxi-with-spl.bin"
+LOGFILE="/tmp/install-to-emmc-$(date -u '+%Y%m%d-%H%M%S').log"
 
-usage() {
-	cat <<EOF
-Usage:
-  $SELF --backup-dir /path/on/usb [--execute]
+# ── Helpers ────────────────────────────────────────────────────
+GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 
-Installs the currently running Cubieboard4 Debian 12 SD system to eMMC.
+die()   { printf "\n${RED}✖ ERROR: %s${NC}\n" "$*" >&2; exit 1; }
+step()  { printf "\n${CYAN}════════════════════════════════════════════════${NC}\n${BOLD}%s${NC}\n" "$*"; }
+info()  { printf "  %s\n" "$*"; }
+ok()    { printf "  ${GREEN}✔ %s${NC}\n" "$*"; }
+warn()  { printf "  ${YELLOW}⚠ %s${NC}\n" "$*"; }
+log()   { printf "[%s] %s\n" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$*" >> "$LOGFILE"; }
+sep()   { printf "  ${CYAN}────────────────────────────────────────────${NC}\n"; }
 
-Default mode is dry-run. No destructive action is performed unless --execute is
-passed and the confirmation prompt is answered with ERASE-EMMC.
-
-The script auto-detects the source SD root and target eMMC disk by scanning
-MMC devices.
-
-The script also flashes a rebuilt U-Boot to the main eMMC user area at
-sector 16 (offset 8KB), which is where the A80 boot ROM reads it.
-
-Options:
-  --backup-dir DIR   Directory where eMMC metadata/backups will be written.
-                     For --execute this must live on a mounted USB drive.
-  --execute          Actually format eMMC root partition and install.
-  --yes              Skip interactive prompt; requires --execute.
-  --target DEV       Target eMMC disk (auto-detected if omitted).
-  --source-root DEV  Source root partition (auto-detected if omitted).
-  --mountpoint DIR   Temporary mountpoint, default: /mnt/cb4-emmc-root.
-  --uboot-bin PATH   Path to u-boot-sunxi-with-spl.bin, default:
-                     /boot/u-boot-sunxi-with-spl.bin.
-  -h, --help         Show this help.
-EOF
+prompt_yn() {
+	local prompt="$1 [Y/n] " reply
+	read -r -p "$prompt" reply </dev/tty
+	case "$reply" in [nN]*) return 1;; *) return 0;; esac
 }
 
-log() {
-	printf '%s\n' "$*"
+prompt_confirm() {
+	local prompt="$1" reply
+	read -r -p "${BOLD}${prompt}${NC} " reply </dev/tty
+	[ "$reply" = "$2" ] || die "confirmation failed (expected '$2')"
 }
-
-die() {
-	printf 'ERROR: %s\n' "$*" >&2
-	exit 1
-}
-
-run() {
-	log "+ $*"
-	if [ "$DRY_RUN" -eq 0 ]; then
-		"$@"
-	fi
-}
-
-missing_pkgs=""
 
 require_cmd() {
-	local cmd="$1"
-	local pkg="${2:-}"
-	if ! command -v "$cmd" >/dev/null 2>&1; then
-		if [ -n "$pkg" ]; then
-			log "Missing: $cmd (package: $pkg)"
-			missing_pkgs="$missing_pkgs $pkg"
-		else
-			die "required command not found: $cmd"
-		fi
+	if ! command -v "$1" >/dev/null 2>&1; then
+		missing="$missing $2"
 	fi
 }
 
-resolve_source() {
-	findmnt -n -o SOURCE /
+show_progress() {
+	local desc="$1" pid=$2
+	while kill -0 "$pid" 2>/dev/null; do
+		printf "\r  ${desc}..."
+		sleep 1
+	done
+	wait "$pid" && printf "\r  ${GREEN}✔${NC} ${desc}  \n" || return 1
 }
 
-# Detect the eMMC block device (non-removable MMC that isn't the SD source)
-detect_emmc() {
-	local source_disk="$1"
-	local dev
-	local disk
-	local removable
+# ── Prerequisites ──────────────────────────────────────────────
+check_prereqs() {
+	step "Prerequisites"
+	missing=""
+	require_cmd findmnt       util-linux
+	require_cmd lsblk         util-linux
+	require_cmd blkid         util-linux
+	require_cmd dd            coreutils
+	require_cmd sha256sum     coreutils
+	require_cmd mkfs.ext4     e2fsprogs
+	require_cmd mount         mount
+	require_cmd umount        mount
+	require_cmd mkimage       u-boot-tools
+	require_cmd parted        parted
+	require_cmd rsync         rsync
 
-	for dev in /dev/mmcblk*; do
+	if [ -z "$missing" ]; then
+		ok "all required packages present"
+		return 0
+	fi
+
+	warn "Missing packages:$missing"
+	if prompt_yn "Install them with apt?"; then
+		apt update && apt install -y $missing || die "package install failed"
+		ok "packages installed"
+	else
+		die "install required packages: apt install$missing"
+	fi
+}
+
+root_check() {
+	[ "$(id -u)" -eq 0 ] || die "run as root"
+	[ "$(uname -s)" = "Linux" ] || die "this script must run on Linux"
+}
+
+# ── Detection ──────────────────────────────────────────────────
+detect_hardware() {
+	step "Hardware Detection"
+
+	SOURCE_ROOT="$(findmnt -n -o SOURCE /)"
+	SOURCE_DISK="$(lsblk -n -o PKNAME "$SOURCE_ROOT" 2>/dev/null | head -1)"
+	[ -n "$SOURCE_DISK" ] && SOURCE_DISK="/dev/$SOURCE_DISK"
+	[ -b "$SOURCE_ROOT" ] || die "source root not found: $SOURCE_ROOT"
+
+	info "Source root:  $SOURCE_ROOT  ($(lsblk -dno SIZE "$SOURCE_ROOT" 2>/dev/null))"
+
+	if [ -b "$SOURCE_DISK" ]; then
+		REMOVABLE="$(cat "/sys/block/$(basename "$SOURCE_DISK")/removable" 2>/dev/null || true)"
+		if [ "$REMOVABLE" = "0" ]; then
+			SOURCE_TYPE="eMMC"
+		else
+			SOURCE_TYPE="SD"
+		fi
+		info "Source disk:  $SOURCE_DISK  (${SOURCE_TYPE})"
+	fi
+
+	# Detect eMMC
+	TARGET_EMMC=""
+	for dev in /dev/mmcblk[0-9] /dev/mmcblk[0-9][0-9]; do
 		[ -b "$dev" ] || continue
-		[ "${dev#/dev/mmcblk[0-9]}" != "$dev" ] && [ "$dev" = "${dev%p*}" ] || continue
-		# Skip partitions, only check disks
-		case "$(basename "$dev")" in
-			mmcblk[0-9]) ;;
-			*) continue ;;
-		esac
-		[ "$dev" = "$source_disk" ] && continue
+		[ "$dev" = "$SOURCE_DISK" ] && continue
 		removable="$(cat "/sys/block/$(basename "$dev")/removable" 2>/dev/null || echo 1)"
 		[ "$removable" = "0" ] || continue
-		printf '%s\n' "$dev"
-		return 0
+		TARGET_EMMC="$dev"
+		break
 	done
 
-	# Fallback: find MMC device (type "MMC") not matching source
-	for dev in /dev/mmcblk[0-9]; do
-		[ -b "$dev" ] || continue
-		[ "$dev" = "$source_disk" ] && continue
-		local mmctype
-		mmctype="$(cat "/sys/block/$(basename "$dev")/device/type" 2>/dev/null || true)"
-		[ "$mmctype" = "MMC" ] || continue
-		printf '%s\n' "$dev"
-		return 0
-	done
-
-	return 1
-}
-
-# Resolve the disk device for a partition
-disk_for_part() {
-	local part="$1"
-	local name
-	local pkname
-	name="$(basename "$part")"
-	pkname="$(lsblk -n -o PKNAME "$part" 2>/dev/null | head -n1 || true)"
-	[ -n "$pkname" ] && printf '/dev/%s\n' "$pkname" || return 1
-}
-
-partition_start() {
-	local part="$1"
-	local name
-	name="$(basename "$part")"
-	cat "/sys/class/block/$name/start"
-}
-
-partition_size() {
-	local part="$1"
-	local name
-	name="$(basename "$part")"
-	cat "/sys/class/block/$name/size"
-}
-
-dump_partition_layout() {
-	local disk="$1"
-	local out="$2"
-
-	{
-		echo "# $disk partition layout captured on $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-		echo "# lsblk"
-		lsblk -o NAME,SIZE,TYPE,FSTYPE,LABEL,UUID,PARTUUID,MOUNTPOINTS "$disk" || true
-		echo
-		echo "# sysfs start/size"
-		for part in "${disk}"p*; do
-			[ -b "$part" ] || continue
-			echo "$part start=$(partition_start "$part") size=$(partition_size "$part")"
+	if [ -z "$TARGET_EMMC" ]; then
+		for dev in /dev/mmcblk[0-9] /dev/mmcblk[0-9][0-9]; do
+			[ -b "$dev" ] || continue
+			[ "$dev" = "$SOURCE_DISK" ] && continue
+			mmctype="$(cat "/sys/block/$(basename "$dev")/device/type" 2>/dev/null || true)"
+			[ "$mmctype" = "MMC" ] || continue
+			TARGET_EMMC="$dev"
+			break
 		done
-		echo
-		echo "# blkid"
-		blkid "$disk"* || true
-	} >"$out"
+	fi
+
+	if [ -z "$TARGET_EMMC" ]; then
+		warn "No eMMC detected automatically"
+		read -r -p "Enter eMMC device path (e.g. /dev/mmcblk1): " TARGET_EMMC </dev/tty
+		[ -b "$TARGET_EMMC" ] || die "invalid device: $TARGET_EMMC"
+	fi
+
+	EMMC_SIZE="$(cat "/sys/block/$(basename "$TARGET_EMMC")/size" 2>/dev/null)"
+	EMMC_HUMAN="$(lsblk -dno SIZE "$TARGET_EMMC" 2>/dev/null || echo "${EMMC_SIZE} sectors")"
+	TARGET_ROOT="${TARGET_EMMC}p2"
+	TARGET_BOOT="${TARGET_EMMC}p1"
+
+	info "Target eMMC: $TARGET_EMMC  ($EMMC_HUMAN)"
+	info "Boot part:   $TARGET_BOOT"
+	info "Root part:   $TARGET_ROOT"
+
+	if [ ! -b "$TARGET_ROOT" ] || [ ! -b "$TARGET_BOOT" ]; then
+		warn "eMMC partition layout not found"
+		lsblk "$TARGET_EMMC" 2>/dev/null || true
+		return 1
+	fi
+
+	if ! prompt_yn "Is this correct?"; then
+		read -r -p "Enter eMMC device (e.g. /dev/mmcblk1): " TARGET_EMMC </dev/tty
+		[ -b "$TARGET_EMMC" ] || die "invalid device: $TARGET_EMMC"
+		TARGET_ROOT="${TARGET_EMMC}p2"
+		TARGET_BOOT="${TARGET_EMMC}p1"
+		EMMC_SIZE="$(cat "/sys/block/$(basename "$TARGET_EMMC")/size" 2>/dev/null || echo 0)"
+		info "Updated target: $TARGET_EMMC"
+	fi
+
+	ok "hardware detected"
+	return 0
 }
 
-mount_source_for_path() {
-	findmnt -n -o SOURCE -T "$1"
+# ── Detect kernel/boot assets ──────────────────────────────────
+detect_assets() {
+	step "Boot Assets"
+
+	KERNEL_VERSION="$(uname -r)"
+	KERNEL_IMAGE="/boot/vmlinuz-${KERNEL_VERSION}"
+	INITRD_IMAGE="/boot/initrd.img-${KERNEL_VERSION}"
+	DTB_IMAGE=""
+	UBOOT_BIN="$UBOOT_BIN_DEFAULT"
+
+	# Search for DTB
+	for dtb_candidate in \
+		"/boot/sun9i-a80-cubieboard4.dtb" \
+		"/boot/dtb-${KERNEL_VERSION}/sun9i-a80-cubieboard4.dtb" \
+		"/usr/lib/linux-image-${KERNEL_VERSION}/sun9i-a80-cubieboard4.dtb" \
+		"/usr/lib/linux-image-${KERNEL_VERSION}/allwinner/sun9i-a80-cubieboard4.dtb"; do
+		if [ -f "$dtb_candidate" ]; then
+			DTB_IMAGE="$dtb_candidate"
+			break
+		fi
+	done
+
+	info "Kernel: $KERNEL_VERSION"
+
+	if [ ! -f "$KERNEL_IMAGE" ]; then
+		# Try wildcard
+		KERNEL_IMAGE="$(ls /boot/vmlinuz-* 2>/dev/null | sort -V | tail -1 || true)"
+		[ -n "$KERNEL_IMAGE" ] || die "no kernel found in /boot"
+		KERNEL_VERSION="${KERNEL_IMAGE#/boot/vmlinuz-}"
+		INITRD_IMAGE="/boot/initrd.img-${KERNEL_VERSION}"
+		info "Found kernel: $KERNEL_VERSION"
+	fi
+
+	[ -f "$KERNEL_IMAGE" ] || die "kernel not found: $KERNEL_IMAGE"
+	[ -f "$INITRD_IMAGE" ] || warn "initrd not found: $INITRD_IMAGE"
+	[ -n "$DTB_IMAGE" ]  || warn "DTB not found (will use installed DTB if available)"
+	[ -f "$UBOOT_BIN" ]  || warn "U-Boot binary not found at $UBOOT_BIN"
+
+	if [ -f "$KERNEL_IMAGE" ]; then ok "kernel: ${KERNEL_IMAGE##*/}"; fi
+	if [ -f "$INITRD_IMAGE" ]; then ok "initrd: ${INITRD_IMAGE##*/}"; fi
+	if [ -n "$DTB_IMAGE" ]; then ok "DTB: ${DTB_IMAGE##*/}"; fi
+	if [ -f "$UBOOT_BIN" ]; then ok "U-Boot: ${UBOOT_BIN##*/} ($(stat -c%s "$UBOOT_BIN" 2>/dev/null) bytes)"; fi
 }
 
-mount_target_for_path() {
-	findmnt -n -o TARGET -T "$1"
-}
+# ── Repartition eMMC ──────────────────────────────────────────
+repartition_emmc() {
+	step "Partition eMMC"
+	warn "This will DESTROY all data on $TARGET_EMMC"
 
-disk_for_block_device() {
-	local dev="$1"
-	local name
-	local pkname
+	echo ""
+	lsblk "$TARGET_EMMC" 2>/dev/null || true
+	echo ""
 
-	name="$(basename "$dev")"
-	pkname="$(lsblk -n -o PKNAME "$dev" 2>/dev/null | head -n 1 || true)"
-	if [ -n "$pkname" ]; then
-		printf '/dev/%s\n' "$pkname"
+	prompt_confirm "Type REPARTITION to continue:" "REPARTITION"
+
+	# Calculate sizes
+	TOTAL_SECTORS="$EMMC_SIZE"
+
+	# boot partition: 128 MiB
+	BOOT_SIZE_MiB=128
+	BOOT_SECTORS=$((BOOT_SIZE_MiB * 1024 * 1024 / 512))
+
+	# Align to 1 MiB
+	ALIGN=2048  # sectors
+	START_SECTOR=$ALIGN
+	BOOT_END=$((START_SECTOR + BOOT_SECTORS - 1))
+
+	# Root partition: rest, aligned
+	ROOT_START=$(( (BOOT_END + ALIGN) / ALIGN * ALIGN ))
+	ROOT_END=$(( (TOTAL_SECTORS / ALIGN) * ALIGN - 1 ))
+
+	info "Layout:"
+	info "  p1: ${BOOT_SIZE_MiB}MiB FAT (${START_SECTOR}s → ${BOOT_END}s)"
+	info "  p2: $(( (ROOT_END - ROOT_START + 1) * 512 / 1024 / 1024 ))MiB ext4 (${ROOT_START}s → ${ROOT_END}s)"
+
+	if prompt_yn "Proceed with partitioning?"; then
+		dd "if=/dev/zero" "of=$TARGET_EMMC" bs=1M count=4 conv=fsync 2>/dev/null || true
+		parted -s "$TARGET_EMMC" mklabel msdos \
+			"mkpart primary fat32 ${START_SECTOR}s ${BOOT_END}s" \
+			"mkpart primary ext4 ${ROOT_START}s ${ROOT_END}s" || die "partitioning failed"
+
+		partprobe "$TARGET_EMMC" 2>/dev/null || true
+		sleep 1
+
+		# Re-detect partitions
+		partprobe "$TARGET_EMMC" 2>/dev/null || udevadm settle 2>/dev/null || true
+		sleep 1
+
+		# Format boot partition
+		info "Formatting boot partition..."
+		mkfs.vfat -F 32 -n CB4-BOOT "${TARGET_EMMC}p1" || die "boot format failed"
+		ok "boot partition formatted"
+
+		ok "repartitioning complete"
 	else
-		printf '/dev/%s\n' "$name"
+		warn "repartitioning skipped"
 	fi
 }
 
-transport_for_block_device() {
-	local dev="$1"
-	local disk
+# ── Backup ─────────────────────────────────────────────────────
+backup_emmc() {
+	step "Backup eMMC"
+	BACKUP_DIR=""
 
-	disk="$(disk_for_block_device "$dev")"
-	lsblk -n -o TRAN "$disk" 2>/dev/null | head -n 1
-}
-
-validate_backup_dir() {
-	local dir="$1"
-	local source
-	local target
-	local transport
-	local available_kb
-	local test_file
-
-	source="$(mount_source_for_path "$dir")"
-	target="$(mount_target_for_path "$dir")"
-	transport=""
-	if [ -b "$source" ]; then
-		transport="$(transport_for_block_device "$source")"
-	fi
-
-	if [ "$DRY_RUN" -eq 1 ]; then
-		log "Backup mount:       ${target:-unknown}"
-		log "Backup source:      ${source:-unknown}"
-		log "Backup transport:   ${transport:-unknown}"
+	if [ ! -b "$TARGET_EMMC" ]; then
+		warn "eMMC not available, skipping backup"
 		return
 	fi
 
-	[ -n "$source" ] || die "cannot determine backup filesystem for: $dir"
-	[ "$target" != "/" ] || die "--backup-dir must be on an external USB drive, not the running root filesystem"
-	[ "$target" != "/tmp" ] || die "--backup-dir must be persistent; /tmp is not acceptable"
-	[ -b "$source" ] || die "--backup-dir is not on a block device: $source"
-	[ "$transport" = "usb" ] || die "--backup-dir must be on a mounted USB drive; got source=$source transport=${transport:-unknown}"
-	[ "$source" != "$SOURCE_ROOT" ] || die "--backup-dir cannot be on the source SD root"
-	[ "$source" != "$TARGET_ROOT" ] || die "--backup-dir cannot be on the target eMMC root"
+	if ! prompt_yn "Backup eMMC before modifying?"; then
+		info "backup skipped"
+		return
+	fi
 
-	available_kb="$(df -Pk "$dir" | awk 'NR == 2 {print $4}')"
-	[ -n "$available_kb" ] || die "cannot determine free space for backup directory"
-	[ "$available_kb" -ge 65536 ] || die "backup directory needs at least 64 MiB free"
+	# Discover USB drives
+	USB_DRIVES=()
+	while IFS= read -r line; do
+		USB_DRIVES+=("$line")
+	done < <(lsblk -dno NAME,SIZE,MODEL,TRAN 2>/dev/null | grep -i '\busb\b' || true)
 
-	test_file="$dir/.cb4-emmc-backup-write-test"
-	printf 'cb4 backup write test\n' >"$test_file" || die "backup directory write test failed"
-	sync "$test_file" 2>/dev/null || sync
-	rm -f "$test_file"
+	if [ ${#USB_DRIVES[@]} -gt 0 ]; then
+		echo ""
+		info "Available USB drives:"
+		sep
+		for i in "${!USB_DRIVES[@]}"; do
+			printf "  %d) /dev/%s\n" $((i+1)) "${USB_DRIVES[i]}"
+		done
+		sep
+		echo ""
+		read -r -p "Select drive number (or press Enter for custom path): " reply </dev/tty
+
+		if [ -n "$reply" ] && [ "$reply" -eq "$reply" ] 2>/dev/null; then
+			idx=$((reply-1))
+			[ "$idx" -ge 0 ] && [ "$idx" -lt "${#USB_DRIVES[@]}" ] || die "invalid selection"
+			USB_DEV="/dev/$(echo "${USB_DRIVES[idx]}" | awk '{print $1}')"
+			USB_PART="$(lsblk -nlo NAME "${USB_DEV}" 2>/dev/null | grep -v "^$(basename "$USB_DEV")\$" | head -1)"
+			if [ -n "$USB_PART" ]; then
+				USB_MOUNT="/mnt/cb4-usb-backup"
+				mkdir -p "$USB_MOUNT"
+				mount "/dev/$USB_PART" "$USB_MOUNT" 2>/dev/null || mount "$USB_DEV" "$USB_MOUNT" 2>/dev/null || {
+					warn "cannot mount $USB_DEV"
+					read -r -p "Enter backup directory path: " reply </dev/tty
+					[ -d "$reply" ] && BACKUP_DIR="$reply"
+					return
+				}
+				BACKUP_DIR="$USB_MOUNT/cb4-emmc-backup-$(date -u '+%Y%m%d-%H%M%S')"
+				mkdir -p "$BACKUP_DIR"
+				info "Backup directory: $BACKUP_DIR"
+			fi
+		elif [ -n "$reply" ] && [ -d "$reply" ]; then
+			BACKUP_DIR="$reply"
+		fi
+	else
+		info "No USB drives detected"
+		read -r -p "Enter backup directory path (or empty to skip): " reply </dev/tty
+		[ -n "$reply" ] && [ -d "$reply" ] && BACKUP_DIR="$reply"
+	fi
+
+	if [ -z "$BACKUP_DIR" ]; then
+		warn "no backup target available"
+		return
+	fi
+
+	# Verify backup is not on SD or eMMC
+	BACKUP_DEV="$(findmnt -n -o SOURCE "$BACKUP_DIR" 2>/dev/null || df "$BACKUP_DIR" 2>/dev/null | tail -1 | awk '{print $1}' || true)"
+	if [ -n "$BACKUP_DEV" ]; then
+		case "$BACKUP_DEV" in
+			"*mmcblk*") warn "Backup target is on MMC (same device as eMMC/SD)! Choose another drive."; BACKUP_DIR=""; return ;;
+		esac
+	fi
+
+	info "Backing up first 32 MiB of eMMC..."
+	(
+		dd "if=$TARGET_EMMC" "of=${BACKUP_DIR}/cb4-emmc-first-32m.bin" bs=1M count=32 status=none conv=fsync
+		sha256sum "${BACKUP_DIR}/cb4-emmc-first-32m.bin" > "${BACKUP_DIR}/cb4-emmc-first-32m.sha256"
+		{
+			echo "# $TARGET_EMMC layout $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+			lsblk -o NAME,SIZE,TYPE,FSTYPE,LABEL,UUID,PARTUUID,MOUNTPOINTS "$TARGET_EMMC" 2>/dev/null || true
+			blkid "$TARGET_EMMC"* 2>/dev/null || true
+		} > "${BACKUP_DIR}/cb4-emmc-layout.txt"
+	) &
+	show_progress "Backing up eMMC" $!
+	ok "backup saved to ${BACKUP_DIR}/"
 }
 
-while [ "$#" -gt 0 ]; do
-	case "$1" in
-		--backup-dir)
-			[ "$#" -ge 2 ] || die "--backup-dir requires a value"
-			BACKUP_DIR="$2"
-			shift 2
-			;;
-		--execute)
-			DRY_RUN=0
-			shift
-			;;
-		--yes)
-			ASSUME_YES=1
-			shift
-			;;
-		--target)
-			[ "$#" -ge 2 ] || die "--target requires a value"
-			TARGET_EMMC="$2"
-			shift 2
-			;;
-		--source-root)
-			[ "$#" -ge 2 ] || die "--source-root requires a value"
-			SOURCE_ROOT="$2"
-			shift 2
-			;;
-		--mountpoint)
-			[ "$#" -ge 2 ] || die "--mountpoint requires a value"
-			MOUNTPOINT="$2"
-			shift 2
-			;;
-		--uboot-bin)
-			[ "$#" -ge 2 ] || die "--uboot-bin requires a value"
-			UBOOT_BIN="$2"
-			shift 2
-			;;
-		-h|--help)
-			usage
-			exit 0
-			;;
-		*)
-			die "unknown argument: $1"
-			;;
-	esac
-done
+# ── Flash U-Boot ──────────────────────────────────────────────
+flash_uboot() {
+	step "Flash U-Boot"
 
-[ "$(id -u)" -eq 0 ] || die "run as root on the Cubieboard4"
-[ "$(uname -s)" = "Linux" ] || die "this installer must run on Linux"
+	if [ ! -f "$UBOOT_BIN" ]; then
+		warn "U-Boot binary not found: $UBOOT_BIN"
+		read -r -p "Enter path to u-boot-sunxi-with-spl.bin (or empty to skip): " reply </dev/tty
+		[ -z "$reply" ] && { warn "skipping U-Boot flash"; return; }
+		UBOOT_BIN="$reply"
+		[ -f "$UBOOT_BIN" ] || die "file not found: $UBOOT_BIN"
+	fi
 
-require_cmd findmnt       util-linux
-require_cmd lsblk         util-linux
-require_cmd blkid         util-linux
-require_cmd dd            coreutils
-require_cmd sha256sum     coreutils
-require_cmd mkfs.ext4     e2fsprogs
-require_cmd mount         mount
-require_cmd umount        mount
-require_cmd mkimage       u-boot-tools
-require_cmd tar           tar
-require_cmd parted        parted
+	if [ ! -b "$TARGET_EMMC" ]; then
+		die "eMMC not found: $TARGET_EMMC"
+	fi
 
-if [ -n "$missing_pkgs" ]; then
-	log "Missing packages:$missing_pkgs"
-	read -r -p "Install them with apt? [Y/n] " reply </dev/tty
-	case "$reply" in
-		[nN]*) die "install required packages manually: apt install$missing_pkgs" ;;
-	esac
-	apt update && apt install -y $missing_pkgs
-fi
+	info "Binary: $UBOOT_BIN ($(stat -c%s "$UBOOT_BIN" 2>/dev/null) bytes)"
+	info "Target: $TARGET_EMMC sector 16"
 
-if command -v rsync >/dev/null 2>&1; then
-	COPY_METHOD="rsync"
-else
-	COPY_METHOD="tar"
-fi
+	prompt_confirm "Type FLASH to continue:" "FLASH"
 
-# Resolve source root
-if [ -z "$SOURCE_ROOT" ]; then
-	SOURCE_ROOT="$(resolve_source)"
-fi
-[ -b "$SOURCE_ROOT" ] || die "source root partition not found: $SOURCE_ROOT"
+	dd "if=$UBOOT_BIN" "of=$TARGET_EMMC" bs=512 seek=16 conv=fsync
 
-CURRENT_ROOT="$(resolve_source)"
-[ "$CURRENT_ROOT" = "$SOURCE_ROOT" ] || die "expected / to be mounted from $SOURCE_ROOT, got $CURRENT_ROOT"
-
-SOURCE_DISK="$(disk_for_part "$SOURCE_ROOT")"
-[ -n "$SOURCE_DISK" ] || die "cannot resolve source disk for: $SOURCE_ROOT"
-
-# Resolve target eMMC
-if [ -z "$TARGET_EMMC" ]; then
-	TARGET_EMMC="$(detect_emmc "$SOURCE_DISK")"
-	[ -n "$TARGET_EMMC" ] || die "cannot auto-detect eMMC device; specify --target manually"
-fi
-[ -b "$TARGET_EMMC" ] || die "target eMMC disk not found: $TARGET_EMMC"
-
-TARGET_ROOT="${TARGET_EMMC}p2"
-TARGET_BOOT="${TARGET_EMMC}p1"
-
-[ -b "$TARGET_ROOT" ] || die "target eMMC root partition not found: $TARGET_ROOT"
-[ -b "$TARGET_BOOT" ] || die "target eMMC boot partition not found: $TARGET_BOOT"
-
-[ -n "$BACKUP_DIR" ] || die "--backup-dir is required"
-mkdir -p "$BACKUP_DIR"
-[ -d "$BACKUP_DIR" ] || die "backup directory does not exist: $BACKUP_DIR"
-[ -w "$BACKUP_DIR" ] || die "backup directory is not writable: $BACKUP_DIR"
-validate_backup_dir "$BACKUP_DIR"
-
-KERNEL_VERSION="$(uname -r)"
-KERNEL_IMAGE="/boot/vmlinuz-${KERNEL_VERSION}"
-INITRD_IMAGE="/boot/initrd.img-${KERNEL_VERSION}"
-DTB_IMAGE="/boot/sun9i-a80-cubieboard4.dtb"
-
-[ -f "$KERNEL_IMAGE" ] || die "kernel image not found: $KERNEL_IMAGE"
-[ -f "$INITRD_IMAGE" ] || die "initrd image not found: $INITRD_IMAGE"
-[ -f "$DTB_IMAGE" ] || die "validated DTB not found: $DTB_IMAGE"
-[ -f "$UBOOT_BIN" ] || die "U-Boot binary not found: $UBOOT_BIN"
-
-if findmnt -n "$TARGET_ROOT" >/dev/null 2>&1; then
-	die "$TARGET_ROOT is already mounted"
-fi
-
-cat <<EOF
-Cubieboard4 eMMC installer
-
-Current root:       $CURRENT_ROOT
-Source disk:        $SOURCE_DISK
-Target eMMC disk:   $TARGET_EMMC
-Target rootfs:      $TARGET_ROOT
-Target boot part:   $TARGET_BOOT
-U-Boot binary:      $UBOOT_BIN
-Kernel:             $KERNEL_VERSION
-Backup directory:   $BACKUP_DIR
-Copy method:        $COPY_METHOD
-Mode:               $([ "$DRY_RUN" -eq 1 ] && echo dry-run || echo execute)
-
-This will:
-  - flash $UBOOT_BIN to $TARGET_EMMC at sector 16 (A80 boot ROM offset)
-  - resize $TARGET_ROOT to fill the full eMMC
-  - erase and replace $TARGET_ROOT
-  - preserve $TARGET_BOOT (FAT partition)
-EOF
-
-if [ "$DRY_RUN" -eq 0 ] && [ "$ASSUME_YES" -eq 0 ]; then
-	printf '\nType ERASE-EMMC to continue: '
-	read -r answer
-	[ "$answer" = "ERASE-EMMC" ] || die "confirmation failed"
-fi
-
-BACKUP_PREFIX="$BACKUP_DIR/cb4-emmc-$(date -u '+%Y%m%d-%H%M%S')"
-
-log
-log "Capturing non-destructive eMMC backup metadata..."
-run dd "if=$TARGET_EMMC" "of=${BACKUP_PREFIX}-first-32m.bin" bs=1M count=32 status=progress conv=fsync
-if [ "$DRY_RUN" -eq 0 ]; then
-	sha256sum "${BACKUP_PREFIX}-first-32m.bin" >"${BACKUP_PREFIX}-first-32m.sha256"
-	dump_partition_layout "$TARGET_EMMC" "${BACKUP_PREFIX}-layout.txt"
-else
-	log "+ sha256sum ${BACKUP_PREFIX}-first-32m.bin >${BACKUP_PREFIX}-first-32m.sha256"
-	log "+ dump partition layout >${BACKUP_PREFIX}-layout.txt"
-fi
-
-log
-log "Flashing U-Boot to $TARGET_EMMC at sector 16 (A80 boot ROM offset)..."
-run dd "if=$UBOOT_BIN" "of=$TARGET_EMMC" bs=512 seek=16 conv=fsync
-
-log
-log "Resizing root partition to fill remaining eMMC space..."
-TARGET_ROOT_PARTNO="${TARGET_ROOT##*p}"
-EMMC_SIZE="$(cat "/sys/block/$(basename "$TARGET_EMMC")/size")"
-TARGET_BOOT_START="$(cat "/sys/block/$(basename "$TARGET_BOOT")/start")"
-TARGET_ROOT_START="$(cat "/sys/block/$(basename "$TARGET_ROOT")/start")"
-# Align end to sector boundary (1 MiB = 2048 sectors)
-ALIGN_SECTORS=2048
-ROOT_END_SECTOR=$(( (EMMC_SIZE / ALIGN_SECTORS) * ALIGN_SECTORS - 1 ))
-run parted -s "$TARGET_EMMC" "resizepart $TARGET_ROOT_PARTNO ${ROOT_END_SECTOR}s"
-run partprobe "$TARGET_EMMC" 2>/dev/null || true
-
-log
-log "Formatting eMMC root partition..."
-run mkfs.ext4 -F -E nodiscard -L cb4-rootfs "$TARGET_ROOT"
-
-log
-log "Mounting target root..."
-run mkdir -p "$MOUNTPOINT"
-run mount "$TARGET_ROOT" "$MOUNTPOINT"
-
-cleanup() {
-	if [ "$DRY_RUN" -eq 0 ] && findmnt -n "$MOUNTPOINT" >/dev/null 2>&1; then
-		umount "$MOUNTPOINT" || true
+	# Verify
+	MAGIC="$(dd "if=$TARGET_EMMC" bs=4 skip=16 count=1 2>/dev/null | strings | head -1)"
+	sync
+	if echo "$MAGIC" | grep -q 'eGON'; then
+		ok "U-Boot flashed successfully (magic: $MAGIC)"
+	else
+		warn "U-Boot magic not found (got: '$MAGIC')"
 	fi
 }
-trap cleanup EXIT
 
-log
-log "Copying running SD rootfs to eMMC..."
-if [ "$COPY_METHOD" = "rsync" ]; then
-	run rsync -aHAX --numeric-ids \
-		--exclude=/dev/* \
-		--exclude=/proc/* \
-		--exclude=/sys/* \
-		--exclude=/run/* \
-		--exclude=/tmp/* \
-		--exclude=/mnt/* \
-		--exclude=/media/* \
-		--exclude=/lost+found \
-		/ "$MOUNTPOINT/"
-else
-	log "+ tar copy / -> $MOUNTPOINT/"
-	if [ "$DRY_RUN" -eq 0 ]; then
-		tar --one-file-system \
-			--exclude=./dev \
-			--exclude=./proc \
-			--exclude=./sys \
-			--exclude=./run \
-			--exclude=./tmp \
-			--exclude=./mnt \
-			--exclude=./media \
-			--exclude=./lost+found \
-			-cpf - -C / . | tar -xpf - -C "$MOUNTPOINT"
+# ── Format rootfs ─────────────────────────────────────────────
+format_rootfs() {
+	step "Format Root Partition"
+
+	if [ ! -b "$TARGET_ROOT" ]; then
+		die "root partition not found: $TARGET_ROOT"
 	fi
-fi
 
-log
-log "Writing eMMC boot script..."
-BOOT_CMD="$MOUNTPOINT/boot/boot.cmd"
-TARGET_ROOT_SPEC="UUID=<target-rootfs-uuid-after-format>"
-if [ "$DRY_RUN" -eq 0 ]; then
+	if findmnt -n "$TARGET_ROOT" >/dev/null 2>&1; then
+		warn "$TARGET_ROOT is currently mounted!"
+		prompt_confirm "Type FORCE to unmount and format:" "FORCE"
+		umount "$TARGET_ROOT" 2>/dev/null || true
+	fi
+
+	ROOT_SIZE="$(lsblk -dno SIZE "$TARGET_ROOT" 2>/dev/null || echo "?")"
+	info "Target: $TARGET_ROOT ($ROOT_SIZE)"
+
+	warn "This will ERASE all data on $TARGET_ROOT"
+	if ! prompt_yn "Format?"; then
+		warn "formatting skipped"
+		return 1
+	fi
+
+	mkfs.ext4 -F -E nodiscard -L cb4-rootfs "$TARGET_ROOT" 2>&1
+	ok "root partition formatted"
+}
+
+# ── Copy rootfs ───────────────────────────────────────────────
+copy_rootfs() {
+	step "Copy Root Filesystem"
+
+	if [ ! -b "$TARGET_ROOT" ]; then
+		die "root partition not found: $TARGET_ROOT"
+	fi
+
+	if findmnt -n "$TARGET_ROOT" >/dev/null 2>&1; then
+		warn "$TARGET_ROOT is already mounted at $(findmnt -n -o TARGET "$TARGET_ROOT")"
+	else
+		mkdir -p "$MOUNTPOINT"
+		mount "$TARGET_ROOT" "$MOUNTPOINT"
+	fi
+
+	ROOT_MOUNT="$(findmnt -n -o TARGET "$TARGET_ROOT")"
+	info "Target mount: $ROOT_MOUNT"
+
+	# Check available space
+	AVAIL="$(df -B1 --output=avail "$SOURCE_ROOT" 2>/dev/null | tail -1 || echo 0)"
+	TARGET_AVAIL="$(df -B1 --output=avail "$ROOT_MOUNT" 2>/dev/null | tail -1 || echo 0)"
+	SOURCE_USED="$(df -B1 --output=used "$SOURCE_ROOT" 2>/dev/null | tail -1 || echo 1)"
+
+	info "Source used:  $(( SOURCE_USED / 1024 / 1024 )) MiB"
+	info "Target avail: $(( TARGET_AVAIL / 1024 / 1024 )) MiB"
+
+	if [ "$SOURCE_USED" -gt "$TARGET_AVAIL" ]; then
+		warn "Target has less space than source used. This may fail!"
+		if ! prompt_yn "Continue anyway?"; then
+			umount "$ROOT_MOUNT" 2>/dev/null || true
+			return
+		fi
+	fi
+
+	if prompt_yn "Start copying?"; then
+		echo ""
+		rsync -aHAX --numeric-ids --info=progress2 \
+			--exclude=/dev/* \
+			--exclude=/proc/* \
+			--exclude=/sys/* \
+			--exclude=/run/* \
+			--exclude=/tmp/* \
+			--exclude=/mnt/* \
+			--exclude=/media/* \
+			--exclude=/lost+found \
+			/ "$ROOT_MOUNT/"
+		echo ""
+		ok "root filesystem copied"
+	else
+		warn "copy skipped"
+		umount "$ROOT_MOUNT" 2>/dev/null || true
+		return 1
+	fi
+}
+
+# ── Generate boot configuration ────────────────────────────────
+configure_boot() {
+	step "Configure Boot"
+
+	ROOT_MOUNT="$(findmnt -n -o TARGET "$TARGET_ROOT" 2>/dev/null || true)"
+	if [ -z "$ROOT_MOUNT" ]; then
+		if [ ! -b "$TARGET_ROOT" ]; then
+			die "root partition not found: $TARGET_ROOT"
+		fi
+		mkdir -p "$MOUNTPOINT"
+		mount "$TARGET_ROOT" "$MOUNTPOINT"
+		ROOT_MOUNT="$MOUNTPOINT"
+	fi
+
+	info "Target mount: $ROOT_MOUNT"
+	info "Target root device: $TARGET_ROOT"
+
 	TARGET_ROOT_UUID="$(blkid -s UUID -o value "$TARGET_ROOT")"
-	[ -n "$TARGET_ROOT_UUID" ] || die "cannot determine target root UUID for: $TARGET_ROOT"
-	TARGET_ROOT_SPEC="UUID=$TARGET_ROOT_UUID"
-	cat >"$BOOT_CMD" <<EOF
-load \${devtype} \${devnum}:\${distro_bootpart} \${kernel_addr_r} /boot/vmlinuz-${KERNEL_VERSION}
-load \${devtype} \${devnum}:\${distro_bootpart} \${ramdisk_addr_r} /boot/initrd.img-${KERNEL_VERSION}
+	if [ -z "$TARGET_ROOT_UUID" ]; then
+		die "cannot determine UUID for $TARGET_ROOT"
+	fi
+	info "Root UUID: $TARGET_ROOT_UUID"
+
+	# Resolve actual kernel version on target
+	TARGET_KERNEL_VERSION="$KERNEL_VERSION"
+	if [ -d "$ROOT_MOUNT/boot" ]; then
+		TARGET_VMLINUZ="$(ls "$ROOT_MOUNT/boot/vmlinuz-"* 2>/dev/null | sort -V | tail -1 || true)"
+		if [ -n "$TARGET_VMLINUZ" ]; then
+			TARGET_KERNEL_VERSION="${TARGET_VMLINUZ##*/vmlinuz-}"
+			[ -f "$ROOT_MOUNT/boot/initrd.img-${TARGET_KERNEL_VERSION}" ] || {
+				# Try to generate initrd
+				warn "initrd not found for $TARGET_KERNEL_VERSION on target"
+			}
+		fi
+	fi
+
+	# Find DTB on target
+	DTB_TARGET=""
+	for d in "$ROOT_MOUNT/boot/sun9i-a80-cubieboard4.dtb" \
+	         "$ROOT_MOUNT/boot/dtb-${TARGET_KERNEL_VERSION}/sun9i-a80-cubieboard4.dtb" \
+	         "$ROOT_MOUNT/usr/lib/linux-image-${TARGET_KERNEL_VERSION}/sun9i-a80-cubieboard4.dtb" \
+	         "$ROOT_MOUNT/usr/lib/linux-image-${TARGET_KERNEL_VERSION}/allwinner/sun9i-a80-cubieboard4.dtb"; do
+		if [ -f "$d" ]; then
+			DTB_TARGET="$d"
+			break
+		fi
+	done
+
+	# Copy DTB if we have one but target doesn't
+	if [ -z "$DTB_TARGET" ] && [ -f "$DTB_IMAGE" ]; then
+		mkdir -p "$ROOT_MOUNT/boot"
+		cp "$DTB_IMAGE" "$ROOT_MOUNT/boot/sun9i-a80-cubieboard4.dtb"
+		DTB_TARGET="$ROOT_MOUNT/boot/sun9i-a80-cubieboard4.dtb"
+		info "copied DTB to target /boot/"
+	elif [ -z "$DTB_TARGET" ]; then
+		warn "no DTB found on target"
+	fi
+
+	# Copy U-Boot if we have it
+	if [ -f "$UBOOT_BIN" ]; then
+		mkdir -p "$ROOT_MOUNT/usr/lib/u-boot" 2>/dev/null || true
+		if [ ! -f "$ROOT_MOUNT/usr/lib/u-boot/u-boot-sunxi-with-spl.bin" ]; then
+			mkdir -p "$ROOT_MOUNT/usr/lib/u-boot"
+			cp "$UBOOT_BIN" "$ROOT_MOUNT/usr/lib/u-boot/"
+			info "copied U-Boot binary to target"
+		fi
+	fi
+
+	# Detect boot.cmd path
+	BOOT_CMD_PATH="$ROOT_MOUNT/boot/boot.cmd"
+
+	# Generate boot.cmd
+	info "Generating boot.cmd..."
+
+	if [ -z "$DTB_TARGET" ]; then
+		warn "No DTB, boot.scr will be generated without fdt_addr_r line"
+	fi
+
+	cat > "$BOOT_CMD_PATH" <<BOOTCMD
+setenv devtype mmc
+load \${devtype} \${devnum}:\${distro_bootpart} \${kernel_addr_r} /boot/vmlinuz-${TARGET_KERNEL_VERSION}
+load \${devtype} \${devnum}:\${distro_bootpart} \${ramdisk_addr_r} /boot/initrd.img-${TARGET_KERNEL_VERSION}
 setenv ramdisk_size \${filesize}
-setenv bootargs root=${TARGET_ROOT_SPEC} rw rootwait
+setenv bootargs root=UUID=${TARGET_ROOT_UUID} rw rootwait
 load \${devtype} \${devnum}:\${distro_bootpart} \${fdt_addr_r} /boot/sun9i-a80-cubieboard4.dtb
 bootz \${kernel_addr_r} \${ramdisk_addr_r}:\${ramdisk_size} \${fdt_addr_r}
-EOF
-	mkimage -C none -A arm -T script -d "$BOOT_CMD" "$MOUNTPOINT/boot/boot.scr"
-else
-	log "+ write $BOOT_CMD (uses distro auto-discovered devnum/devtype) root=$TARGET_ROOT_SPEC"
-	log "+ mkimage -C none -A arm -T script -d $BOOT_CMD $MOUNTPOINT/boot/boot.scr"
-fi
+BOOTCMD
 
-log
-log "Final verification..."
-if [ "$DRY_RUN" -eq 0 ]; then
-	dd "if=$TARGET_EMMC" bs=4 skip=16 count=1 2>/dev/null | grep -q 'eGON' || die "U-Boot flash verification failed: eGON signature not found at sector 16 of $TARGET_EMMC"
-	test -f "$MOUNTPOINT/boot/vmlinuz-${KERNEL_VERSION}"
-	test -f "$MOUNTPOINT/boot/initrd.img-${KERNEL_VERSION}"
-	test -f "$MOUNTPOINT/boot/sun9i-a80-cubieboard4.dtb"
-	test -f "$MOUNTPOINT/boot/boot.scr"
+	mkimage -C none -A arm -T script -d "$BOOT_CMD_PATH" "$ROOT_MOUNT/boot/boot.scr" 2>&1
+	ok "boot.scr generated for UUID=$TARGET_ROOT_UUID kernel=$TARGET_KERNEL_VERSION"
+
+	# Update fstab
+	info "Updating /etc/fstab..."
+	TARGET_BOOT_UUID="$(blkid -s UUID -o value "$TARGET_BOOT" 2>/dev/null || true)"
+	cat > "$ROOT_MOUNT/etc/fstab" <<FSTAB
+# /etc/fstab: static file system information.
+UUID=$TARGET_ROOT_UUID / ext4 defaults,noatime 0 1
+FSTAB
+	if [ -n "$TARGET_BOOT_UUID" ]; then
+		printf 'UUID=%s /boot vfat defaults 0 2\n' "$TARGET_BOOT_UUID" >> "$ROOT_MOUNT/etc/fstab"
+		info "boot partition added to fstab"
+	fi
+	ok "/etc/fstab updated"
+
+	# Copy boot files to FAT as fallback
+	if [ -b "$TARGET_BOOT" ]; then
+		FAT_MOUNT="$(mktemp -d 2>/dev/null || echo "/tmp/cb4-fat-mount")"
+		mkdir -p "$FAT_MOUNT" 2>/dev/null || true
+		if mount "$TARGET_BOOT" "$FAT_MOUNT" 2>/dev/null; then
+			info "Copying boot files to FAT partition (fallback)..."
+			cp "$ROOT_MOUNT/boot/boot.scr" "$ROOT_MOUNT/boot/boot.cmd" "$FAT_MOUNT/" 2>/dev/null || true
+			mkdir -p "$FAT_MOUNT/boot"
+			if [ -f "$ROOT_MOUNT/boot/vmlinuz-${TARGET_KERNEL_VERSION}" ]; then
+				cp "$ROOT_MOUNT/boot/vmlinuz-${TARGET_KERNEL_VERSION}" "$FAT_MOUNT/boot/" 2>/dev/null || true
+			fi
+			if [ -f "$ROOT_MOUNT/boot/initrd.img-${TARGET_KERNEL_VERSION}" ]; then
+				cp "$ROOT_MOUNT/boot/initrd.img-${TARGET_KERNEL_VERSION}" "$FAT_MOUNT/boot/" 2>/dev/null || true
+			fi
+			if [ -f "$DTB_TARGET" ]; then
+				cp "$DTB_TARGET" "$FAT_MOUNT/boot/" 2>/dev/null || true
+			fi
+			sync
+			umount "$FAT_MOUNT" 2>/dev/null || true
+			rm -rf "$FAT_MOUNT" 2>/dev/null || true
+			ok "FAT partition populated"
+		else
+			warn "could not mount $TARGET_BOOT (FAT fallback skipped)"
+		fi
+	fi
+
+	# Sync and cleanup
 	sync
-	umount "$MOUNTPOINT"
-	trap - EXIT
-fi
 
-cat <<EOF
+	# Unmount if we mounted it
+	if [ "$ROOT_MOUNT" = "$MOUNTPOINT" ]; then
+		umount "$ROOT_MOUNT" 2>/dev/null || true
+	fi
+}
 
-Done.
+# ── Verification ────────────────────────────────────────────────
+verify_install() {
+	step "Verification"
 
-Next validation step:
-  1. power off
-  2. remove microSD
-  3. boot from eMMC
-  4. capture serial log
+	local errors=0
 
-Expected eMMC boot root:
-  $TARGET_ROOT_SPEC
+	if [ -b "$TARGET_EMMC" ]; then
+		MAGIC="$(dd "if=$TARGET_EMMC" bs=4 skip=16 count=1 2>/dev/null | strings | head -1)"
+		if echo "$MAGIC" | grep -q 'eGON'; then
+			ok "U-Boot present at sector 16 (magic: $MAGIC)"
+		else
+			warn "U-Boot magic check: got '$MAGIC' (expected 'eGON...')"
+			errors=$((errors + 1))
+		fi
+	else
+		warn "eMMC not available for verification"
+		errors=$((errors + 1))
+	fi
 
-U-Boot flashed at sector 16 with the get_mclk_offset fix
-(CONFIG_MACH_SUN9I instead of CONFIG_MACH_SUN9I_A80).
-See notes/2026-05-26-emmc-boot-fix-clock-register.md for details.
-EOF
+	if [ -b "$TARGET_ROOT" ]; then
+		if findmnt -n "$TARGET_ROOT" >/dev/null 2>&1; then
+			ROOT_MOUNT="$(findmnt -n -o TARGET "$TARGET_ROOT")"
+
+			for f in "vmlinuz-${KERNEL_VERSION}" "initrd.img-${KERNEL_VERSION}" "sun9i-a80-cubieboard4.dtb" "boot.scr"; do
+				if [ -f "$ROOT_MOUNT/boot/$f" ]; then
+					ok "rootfs:/boot/$f present"
+				else
+					warn "rootfs:/boot/$f missing"
+					errors=$((errors + 1))
+				fi
+			done
+
+			# Check fstab
+			if grep -q "UUID=" "$ROOT_MOUNT/etc/fstab" 2>/dev/null; then
+				ok "rootfs:/etc/fstab has UUID entry"
+			else
+				warn "rootfs:/etc/fstab missing UUID entry"
+				errors=$((errors + 1))
+			fi
+		else
+			warn "$TARGET_ROOT not mounted, mounting temporarily"
+			mkdir -p "$MOUNTPOINT"
+			if mount "$TARGET_ROOT" "$MOUNTPOINT" 2>/dev/null; then
+				for f in "vmlinuz-*" "initrd.img-*" "sun9i-a80-cubieboard4.dtb" "boot.scr"; do
+					ls "$MOUNTPOINT/boot/$f" >/dev/null 2>&1 && ok "rootfs:/boot/$f" || warn "rootfs:/boot/$f missing"
+				done
+				umount "$MOUNTPOINT" 2>/dev/null || true
+			fi
+		fi
+	else
+		warn "$TARGET_ROOT not found"
+		errors=$((errors + 1))
+	fi
+
+	if [ "$errors" -eq 0 ]; then
+		ok "All checks passed"
+	else
+		warn "$errors check(s) failed"
+	fi
+}
+
+# ── Main Menu ──────────────────────────────────────────────────
+main_menu() {
+	clear
+	cat <<WELCOME
+${BOLD}╔══════════════════════════════════════════════════════════╗
+║     Cubieboard4 A80 — SD → eMMC Installer (Wizard)     ║
+╚══════════════════════════════════════════════════════════╝${NC}
+
+This wizard will guide you through installing your running
+SD system to the internal eMMC, step by step.
+
+Each step can be skipped if already completed.
+
+WELCOME
+
+	if [ -f "$LOGFILE" ]; then
+		info "Log: $LOGFILE"
+		info "Resuming previous session detected"
+		echo ""
+	fi
+
+	if prompt_yn "Begin?"; then
+		log "=== Session started ==="
+		return 0
+	else
+		die "exiting"
+	fi
+}
+
+# ── Step selection menu ────────────────────────────────────────
+select_steps() {
+	step "Step Selection"
+	info "Choose which steps to run:"
+	sep
+
+	steps=(
+		"Check prerequisites"
+		"Detect hardware"
+		"Detect boot assets"
+		"Repartition eMMC"
+		"Backup eMMC"
+		"Flash U-Boot"
+		"Format root partition"
+		"Copy root filesystem"
+		"Configure boot"
+		"Verify installation"
+	)
+
+	# All enabled by default
+	run_step=()
+	for i in "${!steps[@]}"; do
+		printf "  %2d) %s\n" $((i+1)) "${steps[i]}"
+		run_step[i]=1
+	done
+	sep
+	echo ""
+
+	read -r -p "Enter step numbers to SKIP (e.g. '1 4 5'), or press Enter for all: " reply </dev/tty
+	if [ -n "$reply" ]; then
+		for num in $reply; do
+			idx=$((num-1))
+			[ "$idx" -ge 0 ] && [ "$idx" -lt "${#steps[@]}" ] && run_step[idx]=0 || warn "invalid step: $num"
+		done
+	fi
+
+	echo ""
+	info "Steps marked to run:"
+	for i in "${!steps[@]}"; do
+		if [ "${run_step[i]}" -eq 1 ]; then
+			printf "  ${GREEN}✔${NC}  %s\n" "${steps[i]}"
+		fi
+	done
+	sep
+
+	if prompt_yn "Continue with these steps?"; then
+		return 0
+	else
+		select_steps
+	fi
+}
+
+# ── Run selected steps ─────────────────────────────────────────
+do_step() {
+	local num="$1" desc="$2"
+	shift 2
+	if [ "${run_step[num]:-0}" -eq 1 ]; then
+		log "--- Step $((num+1)): $desc ---"
+		"$@"
+		log "--- Step $((num+1)) complete ---"
+	else
+		info "[skip] $desc"
+	fi
+}
+
+# ── Summary ─────────────────────────────────────────────────────
+print_summary() {
+	step "Install Summary"
+
+	if [ -z "${TARGET_ROOT_UUID:-}" ]; then
+		TARGET_ROOT_UUID="$(blkid -s UUID -o value "$TARGET_ROOT" 2>/dev/null || echo "?")"
+	fi
+
+	cat <<SUMMARY
+
+  ${BOLD}Installation complete!${NC}
+
+  eMMC device:    $TARGET_EMMC
+  Root UUID:      $TARGET_ROOT_UUID
+  Kernel:         ${KERNEL_VERSION:-?}
+  U-Boot:         ${UBOOT_BIN:-?}
+
+  ${BOLD}To boot from eMMC:${NC}
+  1. Power off the board
+  2. Remove the microSD card
+  3. Power on — it should boot from eMMC
+
+  ${BOLD}If boot fails:${NC}
+  - Connect serial (UART0: pins 8-10 on header)
+  - Capture U-Boot output
+  - Check that boot.scr is on the root partition (/boot/boot.scr)
+  - Verify U-Boot was flashed to sector 16
+  - log: $LOGFILE
+
+SUMMARY
+}
+
+# ── Main ────────────────────────────────────────────────────────
+main() {
+	# Initialize log
+	echo "=== Cubieboard4 eMMC Installer Wizard ===" > "$LOGFILE"
+	log "Started at $(date -u)"
+
+	main_menu
+
+	# Run steps based on user selection
+	while true; do
+		select_steps
+
+		root_check
+		do_step 0 "Check prerequisites"       check_prereqs
+		do_step 1 "Detect hardware"           detect_hardware
+		do_step 2 "Detect boot assets"        detect_assets
+
+		if [ "${run_step[1]:-0}" -eq 1 ] || [ "${run_step[2]:-0}" -eq 1 ]; then
+			# Detection ran, save state
+			:
+		fi
+
+		if [ "${run_step[3]:-0}" -eq 1 ] && [ -n "${TARGET_EMMC:-}" ]; then
+			# Check if eMMC has partitions
+			if [ ! -b "${TARGET_EMMC}p1" ] || [ ! -b "${TARGET_EMMC}p2" ]; then
+				warn "eMMC partition layout missing/incomplete"
+				if prompt_yn "Repartition eMMC?"; then
+					repartition_emmc
+				else
+					info "repartition skipped (may cause issues later)"
+				fi
+			else
+				do_step 3 "Repartition eMMC" repartition_emmc
+			fi
+		fi
+
+		do_step 4 "Backup eMMC"              backup_emmc
+		do_step 5 "Flash U-Boot"             flash_uboot
+		do_step 6 "Format root partition"    format_rootfs
+
+		# Only copy root if formated or if target seems empty
+		COPY_NEEDED=0
+		if [ "${run_step[7]:-0}" -eq 1 ]; then
+			if [ -b "$TARGET_ROOT" ]; then
+				TARGET_FSTYPE="$(blkid -s TYPE -o value "$TARGET_ROOT" 2>/dev/null || true)"
+				if [ "$TARGET_FSTYPE" != "ext4" ]; then
+					COPY_NEEDED=1
+				else
+					# Check if target has files
+					ROOT_MOUNT="$(findmnt -n -o TARGET "$TARGET_ROOT" 2>/dev/null || true)"
+					if [ -z "$ROOT_MOUNT" ]; then
+						mkdir -p "$MOUNTPOINT"
+						mount "$TARGET_ROOT" "$MOUNTPOINT" 2>/dev/null || true
+						ROOT_MOUNT="$MOUNTPOINT"
+					fi
+					if [ -d "$ROOT_MOUNT" ]; then
+						FILE_COUNT="$(ls -1 "$ROOT_MOUNT" 2>/dev/null | wc -l)"
+						if [ "$FILE_COUNT" -le 2 ]; then
+							COPY_NEEDED=1
+						else
+							info "target already has $FILE_COUNT entries"
+							if prompt_yn "Target appears populated. Copy anyway (will overwrite)?"; then
+								COPY_NEEDED=1
+							fi
+						fi
+					fi
+				fi
+			fi
+			if [ "$COPY_NEEDED" -eq 1 ]; then
+				do_step 7 "Copy root filesystem"   copy_rootfs
+			fi
+		fi
+
+		do_step 8 "Configure boot"           configure_boot
+		do_step 9 "Verify installation"      verify_install
+
+		print_summary
+		log "=== Session completed ==="
+
+		if prompt_yn "Run again with different options?"; then
+			continue
+		else
+			break
+		fi
+	done
+}
+
+main "$@"
