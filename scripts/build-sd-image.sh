@@ -444,3 +444,25 @@ if [ -n "$VENDOR_LOOP" ]; then
 fi
 
 log "Done: $OUTPUT"
+
+log ""
+read -r -p "Write this image to an SD card? [y/N] " reply </dev/tty
+case "$reply" in
+	[yY]*)
+		log ""
+		log "Available block devices:"
+		lsblk -do NAME,SIZE,TYPE,MOUNTPOINT,MODEL | head -20
+		log ""
+		log "Enter the device path (e.g. /dev/sdb):"
+		read -r sd_dev </dev/tty
+		[ -b "$sd_dev" ] || die "not a block device: $sd_dev"
+		log ""
+		log "WARNING: This will DESTROY ALL DATA on $sd_dev"
+		read -r -p "Are you sure? Type the device name to confirm ($(basename "$sd_dev")): " confirm </dev/tty
+		[ "$confirm" = "$(basename "$sd_dev")" ] || die "confirmation mismatch, aborting"
+		log "Writing $OUTPUT to $sd_dev ..."
+		dd if="$OUTPUT" of="$sd_dev" bs=4M conv=sync status=progress
+		sync
+		log "Done. You can now remove the SD card."
+		;;
+esac
