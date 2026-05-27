@@ -322,7 +322,7 @@ fi
 
 if [ -n "$missing_pkgs" ]; then
 	log "Missing packages:$missing_pkgs"
-	read -r -p "Install them with apt? [Y/n] " reply
+	read -r -p "Install them with apt? [Y/n] " reply </dev/tty
 	case "$reply" in
 		[nN]*) die "install required packages manually: apt install$missing_pkgs" ;;
 	esac
@@ -360,7 +360,7 @@ fi
 log ""
 
 if [ "$DOWNLOAD" -eq 1 ] && [ "$missing" -eq 1 ]; then
-	read -r -p "Download missing assets? [Y/n] " reply
+	read -r -p "Download missing assets? [Y/n] " reply </dev/tty
 	case "$reply" in
 		[nN]*) die "aborted by user" ;;
 	esac
