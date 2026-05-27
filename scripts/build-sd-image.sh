@@ -15,7 +15,7 @@ DOWNLOAD=1
 BOOT_ASSET="boot-cubieboard4.bin.gz"
 ROOTFS_ASSET="debian-bookworm-armhf-vim3ve.bin.gz"
 VENDOR_SD_ASSET="cb4-debian-server-hdmi-card-v1.0.img.7z"
-UBOOT_FIX_ASSET="u-boot-sunxi-with-spl-fixed.bin"
+UBOOT_FIX_ASSET="u-boot-sunxi-with-spl.bin"
 DTB_ASSET="sun9i-a80-cubieboard4.dtb"
 
 BOOT_SHA256="768d66822c61534083330951a4c6ce21493a892596f5a1fb86bef692ccda1411"
