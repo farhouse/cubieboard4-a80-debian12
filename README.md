@@ -120,12 +120,6 @@ Clone the repo and run the builder:
 curl -sL https://raw.githubusercontent.com/farhouse/cubieboard4-a80-debian12/main/scripts/build-sd-image.sh | sudo bash
 ```
 
-For an interactive step-by-step wizard (even via pipe):
-
-```sh
-curl -sL https://raw.githubusercontent.com/farhouse/cubieboard4-a80-debian12/main/scripts/build-sd-image.sh | sudo bash -s -- --interactive
-```
-
 Or for more control:
 
 ```sh
