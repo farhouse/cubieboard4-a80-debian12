@@ -445,6 +445,25 @@ fi
 log ""
 log "--- Installing extra packages ---"
 if command -v qemu-arm-static >/dev/null 2>&1; then
+	HAVE_QEMU=1
+else
+	log "qemu-arm-static not found (needed to install extra packages in the armhf rootfs)"
+	read -r -p "Install qemu-user-static? [Y/n] " reply_qemu </dev/tty
+	case "$reply_qemu" in
+		[nN]*) HAVE_QEMU=0 ;;
+		*)
+			apt install -y qemu-user-static
+			if command -v qemu-arm-static >/dev/null 2>&1; then
+				HAVE_QEMU=1
+			else
+				log "qemu-user-static installation failed"
+				HAVE_QEMU=0
+			fi
+			;;
+	esac
+fi
+
+if [ "$HAVE_QEMU" -eq 1 ]; then
 	log "Installing extra packages: $EXTRA_PKGS"
 	install -m 0755 "$(command -v qemu-arm-static)" "$ROOT_MOUNT/usr/bin/"
 	cp /etc/resolv.conf "$ROOT_MOUNT/etc/resolv.conf"
@@ -461,8 +480,7 @@ if command -v qemu-arm-static >/dev/null 2>&1; then
 	rm -f "$ROOT_MOUNT/usr/bin/qemu-arm-static" "$ROOT_MOUNT/etc/resolv.conf"
 	log "Extra packages installed"
 else
-	log "qemu-arm-static not found, skipping extra packages"
-	log "Install manually on the CB4: apt install $EXTRA_PKGS"
+	log "Skipping extra packages. Install manually on the CB4: apt install $EXTRA_PKGS"
 fi
 
 sync
