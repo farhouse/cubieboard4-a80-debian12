@@ -114,9 +114,17 @@ root-mounted ext4 support in order to patch the rootfs partition inside the
 image. On macOS you can manually download and concatenate the image pieces, but
 installing the DTB and firmware requires Linux or a Linux VM.
 
-Recommended flow from a Linux host or Linux VM:
+Clone the repo and run the builder:
 
 ```sh
+bash <(curl -sL https://raw.githubusercontent.com/farhouse/cubieboard4-a80-debian12/main/scripts/build-sd-image.sh)
+```
+
+Or for more control:
+
+```sh
+git clone https://github.com/farhouse/cubieboard4-a80-revive.git
+cd cubieboard4-a80-revive
 sudo scripts/build-sd-image.sh \
   --work-dir /tmp/cb4-bookworm \
   --output /tmp/cb4-bookworm/cubieboard4-a80-debian12-sd.img
