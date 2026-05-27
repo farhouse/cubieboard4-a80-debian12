@@ -53,25 +53,30 @@ Estabilizar el boot de Cubieboard4 A80 con Debian 12 desde microSD, lograr image
 
 ### Completed
 - SD root UUID fix: `boot.scr` usaba `root=/dev/mmcblk0p2`, pero el orden `mmcblkN` es inestable con SD + eMMC + SDIO WiFi. Corregido a `root=UUID=...`, validado con boot automático hasta login Debian 12.
-- `scripts/build-sd-image.sh`: builder reproducible para Linux que descarga assets desde GitHub Release, arma imagen concatenando boot+rootfs, instala DTB validado, firmware AP6330, y regenera `boot.scr` con `root=UUID=...`.
-- `scripts/install-to-emmc.sh`: instalador conservador SD→eMMC con dry-run por defecto, backup obligatorio en USB, verificación de que el backup no esté en SD/eMMC, formato con `-E nodiscard` para evitar bloqueo, copia via rsync o tar fallback, y genera `boot.scr` para eMMC con `root=UUID=...`.
+- `scripts/build-sd-image.sh`: builder reproducible para Linux que descarga assets desde GitHub Release, arma imagen concatenando boot+rootfs, compila DTB desde `dts/` source, instala firmware AP6330, y regenera `boot.scr` con `root=UUID=...`.
+- `scripts/install-to-emmc.sh`: reescrito como wizard interactivo completo con auto-detección de eMMC/SD/USB, menú de pasos seleccionables, dry-run, backup USB, auto-repartition, boot.cmd/fstab generación, post-install verification, y loop de re-ejecución.
 - Instalación Debian 12 a eMMC completada exitosamente (backup previo, rsync, boot.scr generado).
+- **WiFi AP6330: drive-strength fix**. Root cause: `mmc1_pins` drive-strength 20 (0x14) en vez de 30 (0x1e) causaba `fatal err update clk timeout`. Corregido a 30 (0x1e), DTB recompilado (commit `c19557f`), transferido a CB4 vía serial.
 - DTB validado en `dtb/sun9i-a80-cubieboard4.dtb` con: `broken-cd` en mmc0, mmc1→AP6330 SDIO 4-bit, mmc2→eMMC 8-bit HS200, `phy-supply` en usbphy1/usbphy3, reguladores VBUS, `wifi_pwrseq`.
 - Validación USB Type-A funcional en 4 puertos (hub `05e3:0608`).
 - Validación WiFi AP6330 funcional (`wlan0`, BCM4330/4, HT 300 Mbps).
 - README traducido a inglés y reestructurado alrededor de reproducción de imagen.
-- Matriz de pruebas `docs/boot/matriz-pruebas-arranque.md` con 9 intentos documentados.
+- Matriz de pruebas `docs/boot/matriz-pruebas-arranque.md` con 11 intentos documentados.
 - `CONFIG_MMC_BROKEN_CD=y` agregado a `configs/Cubieboard4_defconfig`, compilado nativo en CB4, flasheado a eMMC boot partition.
 - **eMMC boot sin SD: RESUELTO**. Root cause: `get_mclk_offset()` en `drivers/mmc/sunxi_mmc.c:649` chequeaba `CONFIG_MACH_SUN9I_A80` (no existe) en vez de `CONFIG_MACH_SUN9I`. U-Boot proper escribía clock register de MMC2 en `0x06000090` en vez de `0x06000418`, lo que corrompía CMD2. Fix: cambio de `SUN9I_A80` a `SUN9I`.
+- Parche upstream enviado a `u-boot@lists.denx.de` con CC a Andre Przywara, Peng Fan, Jaehoon Chung.
+- DTB transferido a CB4 vía serial (base64 + tmux paste-buffer) ante falta de red.
+- `build-sd-image.sh`: refactor para compilar DTB desde `dts/` source en vez de descargar release asset. Eliminado `DTB_ASSET` y `DTB_SHA256`.
+- `build-sd-image.sh`: intento de wizard `--interactive` revertido por bugs; vuelto a CLI-only.
+- Documentación actualizada al 2026-05-27 (README, estado-validado, matriz, artefactos-externos, AGENTS).
 
 ### Next Steps
 1. **Reproducir imagen SD con builder**: correr `scripts/build-sd-image.sh` en una máquina Linux o VM Linux, grabar a SD limpia y validar boot automático.
-2. **Bluetooth AP6330**: instalar `bcm40183b2.hcd` y configurar UART/GPIOs BT.
-3. **HDMI/VGA**: probar salida de video.
-4. **Reconstruir DTS source** correspondiente al DTB final.
+2. **Ethernet sin tráfico IPv4**: investigar por qué hay link Gigabit Full Duplex pero 0 paquetes TX/RX. Posible MAC random filtrada.
+3. **Bluetooth AP6330**: instalar `bcm40183b2.hcd` y configurar UART/GPIOs BT.
+4. **HDMI/VGA**: probar salida de video.
 5. **GPU/display** (postergado): PowerVR G6230 sin firmware público para BVNC 1.75.2.30; HDMI no declarado en DTS mainline.
-6. **Enviar patch upstream**: typo `CONFIG_MACH_SUN9I_A80` afecta todos los sun9i-A80.
-7. **Validar con imágenes nuevas de Johan**: probar si la última imagen de Johan (2026-05-25+) también funciona con el builder sin cambios.
+6. **Validar con imágenes nuevas de Johan**: probar si `debian-bookworm-armhf-rieco4.bin.gz` (2026-05-25, kernel 6.1.172-1) funciona con el builder sin cambios.
 
 ### Key Reference Files
 - `dtb/sun9i-a80-cubieboard4.dtb` — DTB final validado.

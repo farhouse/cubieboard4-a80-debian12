@@ -1,6 +1,6 @@
 # Estado validado - Cubieboard4 A80 revive
 
-Fecha de consolidacion: 2026-05-26
+Fecha de consolidacion: 2026-05-27
 
 Este documento resume el estado estable del revive de la Cubieboard4 A80. Las
 notas en `notes/` quedan como bitacora de investigacion; este archivo debe
@@ -13,12 +13,12 @@ La placa bootea Debian 12 Bookworm desde microSD o eMMC con U-Boot 2025.07-rc4
 y DTB corregido. Quedaron validados:
 
 | Subsistema | Estado | Resultado validado |
-|---|---|---|
+|---|---|---|---|
 | Boot desde microSD | Funciona | Arranque automatico via `boot.scr`, con `broken-cd` en `mmc0` |
-| Rootfs Bookworm | Funciona | Kernel `6.1.0-37-armmp`, login/shell usable |
-| Ethernet RTL8211E | Funciona | Link Gigabit Full Duplex |
+| Rootfs Bookworm | Funciona | Kernel `6.1.0-48-armmp` (eMMC), `6.1.0-37-armmp` (SD) |
+| Ethernet RTL8211E | Link Up sin IPv4 | Link Gigabit Full Duplex, pero 0 paquetes TX/RX. Posible MAC random filtrada |
 | USB Type-A | Funciona | Hub interno `05e3:0608`, pendrive probado en los 4 puertos |
-| WiFi AP6330 | Funciona | `wlan0` levanta y escanea redes; BCM4330/4, HT hasta 300 Mbps |
+| WiFi AP6330 | Funciona | `wlan0` levanta y escanea redes; BCM4330/4, HT hasta 300 Mbps. Fix: drive-strength 20→30mA |
 | eMMC | Funciona | Boot sin microSD: SPL → U-Boot proper → kernel → Debian 12 login. Root cause: typo `CONFIG_MACH_SUN9I_A80` → `CONFIG_MACH_SUN9I` en `get_mclk_offset()` (`drivers/mmc/sunxi_mmc.c:649`) |
 | Bluetooth AP6330 | Pendiente | Firmware `bcm40183b2.hcd` localizado, falta configurar |
 | HDMI/VGA | Pendiente | No probado todavia |
@@ -129,6 +129,27 @@ Resultado validado:
   como root persistente; usar `root=UUID=...`.
 
 ### WiFi AP6330 en `mmc1`
+
+#### Drive-strength fix
+
+El WiFi se validó inicialmente el 2026-05-22, pero en boots posteriores
+fallaba con `fatal err update clk timeout`. La causa fue que `drive-strength`
+en `mmc1_pins` estaba en 20 (0x14) en el DTS decompilado, pero el kernel
+mainline espera 30 (0x1e).
+
+Fix (commit `c19557f`):
+
+```dts
+&mmc1_pins {
+	pins = "PG0", "PG1", "PG2", "PG3", "PG4", "PG5";
+	function = "mmc1";
+	drive-strength = <0x1e>;
+	bias-pull-up;
+};
+```
+
+Resultado: `wlan0` funcional con MAC `e0:76:d0:b0:d1:ea`, HT 300 Mbps.
+DTB transferido a CB4 vía serial (base64 + tmux paste-buffer).
 
 La inspeccion de imagenes vendor y Linaro mostro que el WiFi es AP6330/Broadcom
 en `mmc1`, SDIO 4-bit, pines `PG0-PG5`. El DTS base tenia `mmc1` con rasgos de
@@ -256,9 +277,18 @@ mmcblk2: mmc2:0001 NCard  7.30 GiB
 Debian GNU/Linux 12 debian ttyS0
 ```
 
+Validado en 2 boots exitosos consecutivos desde eMMC sin SD (2026-05-26).
+
 Referencia: `notes/2026-05-26-emmc-boot-fix-clock-register.md`.
 
-#### Riesgos
+#### #### Build-sd-image.sh: DTB compilation from dts/ source
+
+El script `scripts/build-sd-image.sh` ahora compila el DTB desde
+`dts/sun9i-a80-cubieboard4.dts` usando `dtc`, en vez de descargarlo como asset
+del release. Esto elimina la dependencia de un release asset separado para el
+DTB y asegura que siempre se use la versión correcta.
+
+Riesgos
 
 - SD y eMMC comparten los mismos `PARTUUID` (`800e6fd4-01` y `800e6fd4-02`).
   Evitar `root=PARTUUID=...` mientras ambos medios esten presentes, salvo que
@@ -461,19 +491,31 @@ picocom -b 115200 --databits 8 --parity n --stopbits 1 --flow n /dev/cu.usbseria
 
 1. Bluetooth AP6330: instalar/configurar `bcm40183b2.hcd` y validar UART/GPIOs BT.
 2. Conectividad WiFi completa: instalar `wpasupplicant` o `iwd` y probar asociacion a red.
-3. HDMI/VGA: probar salida de video.
-4. Capturar un boot log limpio completo con el DTB final, sin payloads de transferencia.
-5. Promover o guardar referencias FEX en `docs/device-tree/` como tabla FEX -> DTS.
-6. Reconstruir DTS source correspondiente al DTB final.
+3. Ethernet: investigar por qué hay link Gigabit pero 0 tráfico IPv4.
+4. HDMI/VGA: probar salida de video.
+5. Capturar un boot log limpio completo con el DTB final, sin payloads de transferencia.
+6. Promover o guardar referencias FEX en `docs/device-tree/` como tabla FEX -> DTS.
 7. Enviar patch upstream: typo `CONFIG_MACH_SUN9I_A80` en `drivers/mmc/sunxi_mmc.c` afecta todos los sun9i-A80.
+8. Probar el `build-sd-image.sh` en Linux host end-to-end y validar imagen resultante.
+9. Probar nuevas imágenes de Johan (2026-05-25+) con el builder.
 
 ## Estado de commits
 
-Commits relevantes ya presentes:
+Commits relevantes:
 
 ```text
 fd6b4e7 docs(boot): add boot test matrix template
 f0989bf feat(usb): enable all 4 Type-A ports and fix SD boot with broken-cd
 abd0c25 feat(wifi): enable AP6330 SDIO WiFi with vendor firmware
 db209b6 docs(handoff): add final session summary with USB + WiFi status
+c19557f fix(dts): mmc1-pins drive-strength 20→30 for AP6330 SDIO reliability
+dcd16de fix(build): update DTB SHA256 for drive-strength fix
+7cd1d4f fix(build): revert --interactive wizard; keep CLI-only
+0a335a6 feat(build): add --interactive flag to build-sd-image.sh (REVERTED)
+2cc7e9d feat(install-to-emmc): rewrite as interactive wizard with step menu
+9d3c946 fix(install-to-emmc): sysfs partition path and fstab generation
+e2e4fb5 fix(emmc): get_mclk_offset() typo CONFIG_MACH_SUN9I_A80 → CONFIG_MACH_SUN9I
+ae1db1f docs(patches): emit patch files for u-boot and dts fixes
+02c5eba fix(build): update DTB SHA256 for drive-strength fix
+b32b6b1 refactor(build): compile DTB from dts/ source instead of downloading release asset
 ```

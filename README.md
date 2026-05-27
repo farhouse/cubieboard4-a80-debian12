@@ -10,16 +10,16 @@ reproduction path is documented here in English.
 
 ## Validated Status
 
-Validated on real hardware on 2026-05-26:
+Validated on real hardware on 2026-05-27:
 
 | Subsystem | Status | Notes |
 |---|---|---|
 | microSD boot | Working | U-Boot loads `boot.scr`; uses `root=UUID=...` |
 | eMMC boot (no SD) | Working | Fixed: `get_mclk_offset()` typo `CONFIG_MACH_SUN9I_A80` → `CONFIG_MACH_SUN9I` |
 | Debian 12 armhf | Working | Kernel `6.1.0-48-armmp` |
-| Ethernet | Working | RTL8211E, Gigabit Full Duplex link |
+| Ethernet | Link Up, no IPv4 | RTL8211E Gigabit Full Duplex link; 0 TX/RX packets — MAC random? |
 | USB Type-A | Working | Internal `05e3:0608` hub; flash drive tested on all 4 ports |
-| AP6330 WiFi | Working | `wlan0` comes up and scans networks; BCM4330/4 |
+| AP6330 WiFi | Working | `wlan0` scans networks; BCM4330/4, HT 300 Mbps |
 | Bluetooth | Pending | Firmware/UART setup still needed |
 | VGA/HDMI | Pending | Not validated yet |
 | PowerVR G6230 GPU | No mainline acceleration | Public firmware for BVNC `1.75.2.30` is missing |
@@ -61,21 +61,21 @@ Johan maintains vanilla Debian/Ubuntu SD-card images for Cubieboard4:
 https://sd-card-images.johang.se/boards/cubieboard4.html
 ```
 
-Direct links recommended by Johan as of 2026-05-24:
+Direct links recommended by Johan as of 2026-05-27:
 
 ```sh
 curl -O https://dl.sd-card-images.johang.se/boots/2026-05-01/boot-cubieboard4.bin.gz
-curl -O https://dl.sd-card-images.johang.se/debians/2026-05-18/debian-bookworm-armhf-ja3iex.bin.gz
+curl -O https://dl.sd-card-images.johang.se/debians/2026-05-25/debian-bookworm-armhf-rieco4.bin.gz
 ```
 
 Johan's server rotates old builds. If those links expire, use the Cubieboard4
 page to pick the latest boot image and Debian Bookworm rootfs.
 
 The Debian image uses the filename suffix as the `root` password. For
-`debian-bookworm-armhf-ja3iex.bin.gz`, the password is:
+`debian-bookworm-armhf-rieco4.bin.gz`, the password is:
 
 ```text
-ja3iex
+rieco4
 ```
 
 ## Required Artifacts
@@ -84,11 +84,11 @@ To reproduce the validated image with this repository's fixes, use the
 preserved assets from the GitHub Release `external-images-2026-05`:
 
 | File | Source | Purpose |
-|---|---|---|
+|---|---|---|---|
 | `boot-cubieboard4.bin.gz` | Johan, mirrored in this repo release | Base boot/U-Boot image for Cubieboard4 |
 | `debian-bookworm-armhf-vim3ve.bin.gz` | Johan, mirrored in this repo release | Debian 12 armhf rootfs used during validation |
-| `dtb/sun9i-a80-cubieboard4.dtb` | This repository | Final validated DTB |
-| `u-boot-sunxi-with-spl-fixed.bin` | This repository | Fixed U-Boot (eMMC clock register, installed to /boot/) |
+| `dts/sun9i-a80-cubieboard4.dts` | This repository (decompiled) | DTS source — DTB compiled automatically by `build-sd-image.sh` |
+| `u-boot-sunxi-with-spl.bin` | This repository (GitHub Release) | Fixed U-Boot (eMMC clock register, installed to /boot/) |
 | `fw_bcm40183b2_ag.bin` | Vendor/Linaro image | AP6330 WiFi firmware |
 | `nvram_ap6330.txt` | Vendor/Linaro image | AP6330 WiFi NVRAM |
 
@@ -132,10 +132,12 @@ sudo scripts/build-sd-image.sh \
 
 The script downloads the preserved assets from the GitHub Release
 `external-images-2026-05`, verifies SHA256 checksums, builds the SD image,
-installs the validated DTB, the fixed U-Boot binary (`u-boot-sunxi-with-spl-fixed.bin`)
-to `/boot/u-boot-sunxi-with-spl.bin`, and copies the AP6330 firmware using the
-filenames expected by `brcmfmac`. It also regenerates `/boot/boot.scr` so the
-kernel uses `root=UUID=...` instead of a fragile `/dev/mmcblkNp2` device name.
+compiles the validated DTB from `dts/sun9i-a80-cubieboard4.dts` (or uses
+`--dtb` to override), installs the fixed U-Boot binary
+(`u-boot-sunxi-with-spl.bin`) to `/boot/u-boot-sunxi-with-spl.bin`, and copies
+the AP6330 firmware using the filenames expected by `brcmfmac`. It also
+regenerates `/boot/boot.scr` so the kernel uses `root=UUID=...` instead of a
+fragile `/dev/mmcblkNp2` device name.
 
 The fixed U-Boot is required for eMMC boot without SD. When running the
 install-to-emmc.sh script on the CB4, it will flash this binary from
@@ -145,7 +147,7 @@ Host requirements:
 
 - Linux with root permissions for `losetup` and ext4 mounting;
 - `curl` or `wget`;
-- `sha256sum`, `gzip`, `blkid`, `losetup`, `mount`, `umount`;
+- `sha256sum`, `gzip`, `dtc` (device-tree-compiler), `blkid`, `losetup`, `mount`, `umount`;
 - `mkimage` from `u-boot-tools`;
 - `7z`, unless using `--firmware-dir` or `--no-firmware`.
 
@@ -333,7 +335,22 @@ The validated DTB (`dtb/sun9i-a80-cubieboard4.dtb`) includes:
 
 See DTS details in [docs/estado-validado.md](docs/estado-validado.md).
 
-### U-Boot fix: eMMC clock register
+#### WiFi AP6330: SDIO drive-strength fix
+
+**Root cause**: `mmc1_pins` drive-strength was set to 20 (0x14) in the
+decompiled DTS, but the mainline kernel expects 30 (0x1e). The lower drive
+strength caused SDIO clock timeouts (`fatal err update clk timeout`) during
+initialization of the BCM4330/4 chip.
+
+**Fix**: Changed `drive-strength = <0x14>` to `drive-strength = <0x1e>` in
+the DTS `mmc1_pins` node.
+
+**Result**: `wlan0` available with MAC `e0:76:d0:b0:d1:ea`, scans networks,
+HT 300 Mbps.
+
+See commit `c19557f` and the DTB at `dtb/sun9i-a80-cubieboard4.dtb`.
+
+## U-Boot fix: eMMC clock register
 
 **Root cause**: `get_mclk_offset()` in `drivers/mmc/sunxi_mmc.c` checked
 `CONFIG_MACH_SUN9I_A80` (does not exist) instead of `CONFIG_MACH_SUN9I`.
@@ -353,33 +370,34 @@ for the full analysis.
 
 - Validate VGA/HDMI.
 - Configure AP6330 Bluetooth.
+- Investigate Ethernet: link up (1Gbps Full Duplex) but 0 IPv4 TX/RX packets.
+- Test `scripts/build-sd-image.sh` on a Linux host end-to-end.
 - Send U-Boot upstream patch: typo `CONFIG_MACH_SUN9I_A80` affects all sun9i-A80 boards.
 
 ## eMMC Install Script
 
-There is a conservative installer for copying the currently running SD system
-to eMMC and flashing the fixed U-Boot:
+There is an interactive wizard for copying the currently running SD system to
+eMMC and flashing the fixed U-Boot. It auto-detects eMMC, SD, and USB devices,
+offers a menu of steps, and includes dry-run mode, USB backup with automatic
+discovery, auto-repartition, boot file fallback to FAT, and post-install
+verification.
 
 ```sh
-sudo scripts/install-to-emmc.sh --backup-dir /media/usb
+sudo scripts/install-to-emmc.sh
 ```
 
-It runs in dry-run mode by default. To execute for real:
+The wizard shows a menu of steps that can be selected or skipped. All operations
+are printed but not executed unless confirmed. It supports:
 
-```sh
-sudo scripts/install-to-emmc.sh --backup-dir /media/usb --execute
-```
+1. Auto-detection of eMMC, SD, and USB drives.
+2. USB backup of the first 32 MiB of eMMC (with sanity checks).
+3. Flash of `/boot/u-boot-sunxi-with-spl.bin` to eMMC at **sector 16**.
+4. Auto-repartition if eMMC has no partitions.
+5. Format + rsync (or tar fallback) of rootfs.
+6. Generation of `boot.scr` (from `boot.cmd`) and `/etc/fstab`.
+7. Post-install verification and loop re-execution.
 
-The script auto-detects the source SD and target eMMC devices (no more
-hardcoded `/dev/mmcblk1`). It:
-
-1. Backs up the first 32 MiB of eMMC to the USB drive.
-2. Flashes `/boot/u-boot-sunxi-with-spl.bin` (the fixed binary, included in
-   the SD image by the builder) to the eMMC user area at **sector 16** (where
-   the A80 boot ROM reads it).
-3. Formats and copies the rootfs via `rsync` or `tar`.
-4. Generates a `boot.scr` with `root=UUID=...` using U-Boot's distro-boot
-   variables.
+Run with `--dry-run` (default) to preview, `--execute` to apply.
 
 The eMMC boot blocker (`MMC: no card present`) was resolved on 2026-05-26.
 See [notes/2026-05-26-emmc-boot-fix-clock-register.md](notes/2026-05-26-emmc-boot-fix-clock-register.md).

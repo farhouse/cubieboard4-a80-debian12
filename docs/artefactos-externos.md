@@ -1,6 +1,6 @@
 # Artefactos externos
 
-Fecha de consolidacion: 2026-05-25
+Fecha de consolidacion: 2026-05-27
 
 Este proyecto evita versionar imagenes completas dentro del historial git. Las
 imagenes se conservan como artefactos externos y se referencian desde la
@@ -68,7 +68,8 @@ Descarga y verifica:
 - `debian-bookworm-armhf-vim3ve.bin.gz`
 - `cb4-debian-server-hdmi-card-v1.0.img.7z`, solo para extraer firmware AP6330
 
-Luego genera una imagen SD, instala el DTB validado del repositorio y copia:
+Compila el DTB desde `dts/sun9i-a80-cubieboard4.dts` (no lo descarga como
+asset). Luego genera una imagen SD, instala el DTB compilado y copia:
 
 - `fw_bcm40183b2_ag.bin` a `lib/firmware/brcm/brcmfmac4330-sdio.bin`
 - `nvram_ap6330.txt` a `lib/firmware/brcm/brcmfmac4330-sdio.txt`
