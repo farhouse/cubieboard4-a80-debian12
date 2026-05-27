@@ -466,7 +466,9 @@ fi
 if [ "$HAVE_QEMU" -eq 1 ]; then
 	log "Installing extra packages: $EXTRA_PKGS"
 	install -m 0755 "$(command -v qemu-arm-static)" "$ROOT_MOUNT/usr/bin/"
-	cp /etc/resolv.conf "$ROOT_MOUNT/etc/resolv.conf"
+	[ -L "$ROOT_MOUNT/etc/resolv.conf" ] && RESOLV_ISLINK=1 || RESOLV_ISLINK=0
+	rm -f "$ROOT_MOUNT/etc/resolv.conf"
+	printf 'nameserver 8.8.8.8\n' >"$ROOT_MOUNT/etc/resolv.conf"
 	mount --bind /proc "$ROOT_MOUNT/proc"
 	mount --bind /dev "$ROOT_MOUNT/dev"
 	mount --bind /sys "$ROOT_MOUNT/sys"
