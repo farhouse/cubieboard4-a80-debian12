@@ -8,6 +8,7 @@ RAW_BASE="https://raw.githubusercontent.com/farhouse/cubieboard4-a80-debian12/ma
 WORK_DIR="build/sd-image"
 OUTPUT=""
 DTB="dtb/sun9i-a80-cubieboard4.dtb"
+EXTRA_PKGS="parted wpasupplicant iw"
 FIRMWARE_DIR=""
 WITH_FIRMWARE=1
 DOWNLOAD=1
@@ -439,6 +440,29 @@ if [ "$WITH_FIRMWARE" -eq 1 ]; then
 	fi
 else
 	log "Skipping AP6330 WiFi firmware"
+fi
+
+log ""
+log "--- Installing extra packages ---"
+if command -v qemu-arm-static >/dev/null 2>&1; then
+	log "Installing extra packages: $EXTRA_PKGS"
+	install -m 0755 "$(command -v qemu-arm-static)" "$ROOT_MOUNT/usr/bin/"
+	cp /etc/resolv.conf "$ROOT_MOUNT/etc/resolv.conf"
+	mount --bind /proc "$ROOT_MOUNT/proc"
+	mount --bind /dev "$ROOT_MOUNT/dev"
+	mount --bind /sys "$ROOT_MOUNT/sys"
+	mount --bind /dev/pts "$ROOT_MOUNT/dev/pts" 2>/dev/null || true
+	chroot "$ROOT_MOUNT" apt update
+	chroot "$ROOT_MOUNT" apt install -y $EXTRA_PKGS
+	umount "$ROOT_MOUNT/dev/pts" 2>/dev/null || true
+	umount "$ROOT_MOUNT/sys"
+	umount "$ROOT_MOUNT/dev"
+	umount "$ROOT_MOUNT/proc"
+	rm -f "$ROOT_MOUNT/usr/bin/qemu-arm-static" "$ROOT_MOUNT/etc/resolv.conf"
+	log "Extra packages installed"
+else
+	log "qemu-arm-static not found, skipping extra packages"
+	log "Install manually on the CB4: apt install $EXTRA_PKGS"
 fi
 
 sync
