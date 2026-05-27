@@ -833,6 +833,11 @@ while [ "$#" -gt 0 ]; do
 done
 
 # ── Entry point ────────────────────────────────────────────────
+# Auto-detect non-interactive mode (pipe via curl | bash, no TTY)
+if [ ! -t 0 ] || ! (exec <>/dev/tty) 2>/dev/null; then
+	INTERACTIVE=0
+fi
+
 if [ "$INTERACTIVE" -eq 1 ]; then
 	wizard_main
 else
