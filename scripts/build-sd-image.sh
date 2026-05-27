@@ -7,6 +7,7 @@ RELEASE_BASE="https://github.com/farhouse/cubieboard4-a80-debian12/releases/down
 RAW_BASE="https://raw.githubusercontent.com/farhouse/cubieboard4-a80-debian12/main"
 WORK_DIR="build/sd-image"
 OUTPUT=""
+DTS_SRC="dts/sun9i-a80-cubieboard4.dts"
 DTB="dtb/sun9i-a80-cubieboard4.dtb"
 EXTRA_PKGS="parted wpasupplicant iw"
 FIRMWARE_DIR=""
@@ -17,13 +18,11 @@ BOOT_ASSET="boot-cubieboard4.bin.gz"
 ROOTFS_ASSET="debian-bookworm-armhf-vim3ve.bin.gz"
 VENDOR_SD_ASSET="cb4-debian-server-hdmi-card-v1.0.img.7z"
 UBOOT_FIX_ASSET="u-boot-sunxi-with-spl.bin"
-DTB_ASSET="sun9i-a80-cubieboard4.dtb"
 
 BOOT_SHA256="768d66822c61534083330951a4c6ce21493a892596f5a1fb86bef692ccda1411"
 ROOTFS_SHA256="f9bc8b5e61599d4a680eca63ddd09dcde5392ba5161325e1031eef9b574adffb"
 VENDOR_SD_SHA256="8af6f75dffa4b215fa40e254365f54de89510a2c0934b5ab4ac61e441eada3f5"
 UBOOT_FIX_SHA256="56e1ce91b886be77673d9c27278a8ddf71775052085bc4b18583368a899e1f5d"
-DTB_SHA256="f0420b6774475a7bd0ac544c10e0c2a895a810ffa2e2011cc6f8ac38ccbb49a8"
 
 CACHE_DIR=""
 ROOT_MOUNT=""
@@ -44,15 +43,16 @@ Default assets:
   boot:    $BOOT_ASSET
   rootfs:  $ROOTFS_ASSET
   vendor:  $VENDOR_SD_ASSET
-  dtb:     $DTB_ASSET
   uboot:   $UBOOT_FIX_ASSET (fixed eMMC clock register)
+
+DTB is compiled from $DTS_SRC during the build.
 
 Options:
   --output FILE        Final image path.
                        Default: WORK_DIR/cubieboard4-a80-debian12-sd.img
   --work-dir DIR       Cache and temporary files, default: $WORK_DIR.
   --release-base URL   Override the GitHub Release download base URL.
-  --dtb FILE           DTB to install, default: $DTB.
+  --dtb FILE           DTB to install (overrides compilation from $DTS_SRC), default: $DTB.
   --firmware-dir DIR   Use AP6330 firmware from DIR instead of vendor image.
                        Expected files: fw_bcm40183b2_ag.bin, nvram_ap6330.txt
   --no-firmware        Do not install AP6330 WiFi firmware.
@@ -60,9 +60,9 @@ Options:
   -h, --help           Show this help.
 
 Requirements:
-  Linux root shell with curl or wget, sha256sum, gzip, blkid, losetup, mount,
-  umount, and mkimage from u-boot-tools. 7z is also required unless
-  --firmware-dir or --no-firmware is used.
+  Linux root shell with curl or wget, sha256sum, gzip, dtc (device-tree-compiler),
+  blkid, losetup, mount, umount, and mkimage from u-boot-tools. 7z is also required
+  unless --firmware-dir or --no-firmware is used.
 EOF
 }
 
@@ -307,6 +307,7 @@ done
 missing_pkgs=""
 require_cmd blkid         util-linux
 require_cmd curl          curl
+require_cmd dtc           device-tree-compiler
 require_cmd gzip          gzip
 require_cmd install       coreutils
 require_cmd losetup       util-linux
@@ -355,25 +356,26 @@ check_asset "Boot image"            "$CACHE_DIR/$BOOT_ASSET"
 check_asset "Debian rootfs"         "$CACHE_DIR/$ROOTFS_ASSET"
 check_asset "Fixed U-Boot"          "$CACHE_DIR/$UBOOT_FIX_ASSET"
 check_asset "Vendor SD (firmware)"  "$CACHE_DIR/$VENDOR_SD_ASSET"
-if [ -f "$DTB" ]; then
-	log "  [OK]   DTB ($DTB)"
+if [ -f "$DTS_SRC" ]; then
+	log "  [OK]   DTS source ($DTS_SRC)"
 else
-	check_asset "DTB" "$CACHE_DIR/$DTB_ASSET"
+	log "  [MISS] $DTS_SRC"
+	missing=1
 fi
 log ""
+
+[ -f "$DTS_SRC" ] || die "DTS source not found: $DTS_SRC"
+
+if [ ! -f "$DTB" ] || [ "$DTB" -ot "$DTS_SRC" ]; then
+	log "Compiling DTB: $DTS_SRC -> $DTB"
+	dtc -I dts -O dtb -o "$DTB" "$DTS_SRC"
+fi
 
 if [ "$DOWNLOAD" -eq 1 ] && [ "$missing" -eq 1 ]; then
 	read -r -p "Download missing assets? [Y/n] " reply </dev/tty
 	case "$reply" in
 		[nN]*) die "aborted by user" ;;
 	esac
-fi
-
-if [ ! -f "$DTB" ]; then
-	log "DTB not found locally, will download from release"
-	download_asset "$DTB_ASSET"
-	verify_sha256 "$CACHE_DIR/$DTB_ASSET" "$DTB_SHA256"
-	DTB="$CACHE_DIR/$DTB_ASSET"
 fi
 
 if [ -z "$OUTPUT" ]; then
