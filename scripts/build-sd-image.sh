@@ -90,6 +90,7 @@ usage() {
 Usage:
   sudo $SELF [options]
   sudo $SELF --interactive
+  curl -sL ... | sudo bash -s -- --interactive
 
 Builds a Cubieboard4 Debian 12 SD image from preserved release assets, then
 patches the root filesystem with the validated DTB and AP6330 WiFi firmware.
@@ -833,13 +834,10 @@ while [ "$#" -gt 0 ]; do
 done
 
 # ── Entry point ────────────────────────────────────────────────
-# Auto-detect non-interactive mode (pipe via curl | bash, no TTY)
-if [ ! -t 0 ] || ! (exec <>/dev/tty) 2>/dev/null; then
+# Auto-detect: force CLI mode only if /dev/tty is totally inaccessible
+# (CI environments, Docker without -t). Pipe (curl | bash) still has /dev/tty.
+if [ "$INTERACTIVE" -eq 0 ] && ! (exec <>/dev/tty) 2>/dev/null; then
 	INTERACTIVE=0
 fi
 
-if [ "$INTERACTIVE" -eq 1 ]; then
-	wizard_main
-else
-	cli_main
-fi
+
