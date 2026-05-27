@@ -15,11 +15,13 @@ BOOT_ASSET="boot-cubieboard4.bin.gz"
 ROOTFS_ASSET="debian-bookworm-armhf-vim3ve.bin.gz"
 VENDOR_SD_ASSET="cb4-debian-server-hdmi-card-v1.0.img.7z"
 UBOOT_FIX_ASSET="u-boot-sunxi-with-spl-fixed.bin"
+DTB_ASSET="sun9i-a80-cubieboard4.dtb"
 
 BOOT_SHA256="768d66822c61534083330951a4c6ce21493a892596f5a1fb86bef692ccda1411"
 ROOTFS_SHA256="f9bc8b5e61599d4a680eca63ddd09dcde5392ba5161325e1031eef9b574adffb"
 VENDOR_SD_SHA256="8af6f75dffa4b215fa40e254365f54de89510a2c0934b5ab4ac61e441eada3f5"
 UBOOT_FIX_SHA256="56e1ce91b886be77673d9c27278a8ddf71775052085bc4b18583368a899e1f5d"
+DTB_SHA256="37cf7a7cc94ae93131d454b4e88db8f138c0b8e56a83ecbeff49eb93daf0ea11"
 
 CACHE_DIR=""
 ROOT_MOUNT=""
@@ -40,6 +42,7 @@ Default assets:
   boot:    $BOOT_ASSET
   rootfs:  $ROOTFS_ASSET
   vendor:  $VENDOR_SD_ASSET
+  dtb:     $DTB_ASSET
   uboot:   $UBOOT_FIX_ASSET (fixed eMMC clock register)
 
 Options:
@@ -301,7 +304,12 @@ require_cmd sha256sum
 require_cmd sync
 require_cmd umount
 
-[ -f "$DTB" ] || die "DTB not found: $DTB"
+if [ ! -f "$DTB" ]; then
+	log "DTB not found locally: $DTB, downloading from release"
+	download_asset "$DTB_ASSET"
+	verify_sha256 "$CACHE_DIR/$DTB_ASSET" "$DTB_SHA256"
+	DTB="$CACHE_DIR/$DTB_ASSET"
+fi
 
 if [ -z "$OUTPUT" ]; then
 	OUTPUT="$WORK_DIR/cubieboard4-a80-debian12-sd.img"
