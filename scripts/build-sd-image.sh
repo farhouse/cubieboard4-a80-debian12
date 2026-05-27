@@ -457,8 +457,8 @@ read -r -p "Write this image to an SD card? [y/N] " reply </dev/tty
 case "$reply" in
 	[yY]*)
 		log ""
-		log "Available block devices:"
-		lsblk -do NAME,SIZE,TYPE,MOUNTPOINT,MODEL | head -20
+		log "Available disks (exclude the one with / mount):"
+		lsblk -dno NAME,SIZE,MODEL,TRAN | grep -v loop
 		log ""
 		log "Enter the device path (e.g. /dev/sdb):"
 		read -r sd_dev </dev/tty
