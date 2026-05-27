@@ -117,7 +117,7 @@ installing the DTB and firmware requires Linux or a Linux VM.
 Clone the repo and run the builder:
 
 ```sh
-bash <(curl -sL https://raw.githubusercontent.com/farhouse/cubieboard4-a80-debian12/main/scripts/build-sd-image.sh)
+curl -sL https://raw.githubusercontent.com/farhouse/cubieboard4-a80-debian12/main/scripts/build-sd-image.sh | sudo bash
 ```
 
 Or for more control:

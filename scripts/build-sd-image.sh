@@ -305,8 +305,44 @@ require_cmd sha256sum
 require_cmd sync
 require_cmd umount
 
+CACHE_DIR="$WORK_DIR/cache"
+mkdir -p "$CACHE_DIR"
+
+log "=== Cubieboard4 A80 Debian 12 SD Image Builder ==="
+log ""
+
+missing=0
+check_asset() {
+	local label="$1"
+	local path="$2"
+	if [ -f "$path" ]; then
+		log "  [OK]   $label"
+	else
+		log "  [MISS] $label"
+		missing=1
+	fi
+}
+
+check_asset "Boot image"            "$CACHE_DIR/$BOOT_ASSET"
+check_asset "Debian rootfs"         "$CACHE_DIR/$ROOTFS_ASSET"
+check_asset "Fixed U-Boot"          "$CACHE_DIR/$UBOOT_FIX_ASSET"
+check_asset "Vendor SD (firmware)"  "$CACHE_DIR/$VENDOR_SD_ASSET"
+if [ -f "$DTB" ]; then
+	log "  [OK]   DTB ($DTB)"
+else
+	check_asset "DTB" "$CACHE_DIR/$DTB_ASSET"
+fi
+log ""
+
+if [ "$DOWNLOAD" -eq 1 ] && [ "$missing" -eq 1 ]; then
+	read -r -p "Download missing assets? [Y/n] " reply
+	case "$reply" in
+		[nN]*) die "aborted by user" ;;
+	esac
+fi
+
 if [ ! -f "$DTB" ]; then
-	log "DTB not found locally: $DTB, downloading from release"
+	log "DTB not found locally, will download from release"
 	download_asset "$DTB_ASSET"
 	verify_sha256 "$CACHE_DIR/$DTB_ASSET" "$DTB_SHA256"
 	DTB="$CACHE_DIR/$DTB_ASSET"
@@ -317,9 +353,8 @@ if [ -z "$OUTPUT" ]; then
 fi
 validate_output_path
 
-CACHE_DIR="$WORK_DIR/cache"
 ROOT_MOUNT="$WORK_DIR/mnt-root"
-mkdir -p "$CACHE_DIR" "$ROOT_MOUNT" "$(dirname "$OUTPUT")"
+mkdir -p "$ROOT_MOUNT" "$(dirname "$OUTPUT")"
 trap cleanup EXIT
 
 download_asset "$BOOT_ASSET"
