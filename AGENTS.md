@@ -81,6 +81,7 @@ Estabilizar el boot de Cubieboard4 A80 con Debian 12 desde microSD, lograr image
 ### Key Reference Files
 - `dtb/sun9i-a80-cubieboard4.dtb` — DTB final validado.
 - `scripts/build-sd-image.sh` — builder reproducible.
+- `scripts/wifi-wizard.sh` — asistente interactivo WiFi para CB4 via UART.
 - `scripts/install-to-emmc.sh` — instalador eMMC.
 - `docs/boot/matriz-pruebas-arranque.md` — matriz cronológica de pruebas.
 - `docs/estado-validado.md` — estado consolidado de subsistemas.
