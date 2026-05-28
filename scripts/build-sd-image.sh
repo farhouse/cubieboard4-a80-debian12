@@ -381,9 +381,9 @@ if [ ! -f "$DTS_SRC" ]; then
 		log "Using cached DTS: $CACHE_DIR/$DTS_ASSET"
 		DTS_SRC="$CACHE_DIR/$DTS_ASSET"
 	else
-		local dts_url="$RAW_BASE/$DTS_ASSET"
-		local dts_dest="$CACHE_DIR/$DTS_ASSET"
-		local dts_tmp="${dts_dest}.tmp-$$"
+		dts_url="$RAW_BASE/$DTS_ASSET"
+		dts_dest="$CACHE_DIR/$DTS_ASSET"
+		dts_tmp="${dts_dest}.tmp-$$"
 		log "Downloading DTS: $dts_url"
 		if command -v curl >/dev/null 2>&1; then
 			curl -L --connect-timeout 15 --max-time 60 --fail --output "$dts_tmp" "$dts_url" || {
