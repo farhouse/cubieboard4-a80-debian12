@@ -8,6 +8,8 @@ RAW_BASE="https://raw.githubusercontent.com/farhouse/cubieboard4-a80-debian12/ma
 WORK_DIR="build/sd-image"
 OUTPUT=""
 DTS_SRC="dts/sun9i-a80-cubieboard4.dts"
+DTS_ASSET="dts/sun9i-a80-cubieboard4.dts"
+DTS_SHA256="81767357cadd17b0980d4f6787508216740831b89e76588421be56f40d402a0f"
 DTB="dtb/sun9i-a80-cubieboard4.dtb"
 EXTRA_PKGS="parted wpasupplicant iw"
 FIRMWARE_DIR=""
@@ -358,16 +360,51 @@ check_asset "Fixed U-Boot"          "$CACHE_DIR/$UBOOT_FIX_ASSET"
 check_asset "Vendor SD (firmware)"  "$CACHE_DIR/$VENDOR_SD_ASSET"
 if [ -f "$DTS_SRC" ]; then
 	log "  [OK]   DTS source ($DTS_SRC)"
+elif [ -f "$CACHE_DIR/$DTS_ASSET" ]; then
+	log "  [OK]   DTS source (cached: $CACHE_DIR/$DTS_ASSET)"
+	DTS_SRC="$CACHE_DIR/$DTS_ASSET"
 else
 	log "  [MISS] $DTS_SRC"
 	missing=1
 fi
 log ""
 
-[ -f "$DTS_SRC" ] || die "DTS source not found: $DTS_SRC"
+download_dts() {
+	local dest="$CACHE_DIR/$DTS_ASSET"
+	local url="$RAW_BASE/$DTS_ASSET"
+
+	if [ -f "$dest" ]; then
+		log "Using cached DTS: $dest"
+		return 0
+	fi
+
+	[ "$DOWNLOAD" -eq 1 ] || die "missing cached DTS and --skip-download was used: $dest"
+
+	log "Downloading: $url"
+	if command -v curl >/dev/null 2>&1; then
+		curl -sL --fail --output "$dest.tmp" "$url"
+	elif command -v wget >/dev/null 2>&1; then
+		wget -O "$dest.tmp" "$url"
+	else
+		die "required command not found: curl or wget"
+	fi
+	mv "$dest.tmp" "$dest"
+}
+
+# Ensure DTS is available — download from raw GitHub if missing
+if [ ! -f "$DTS_SRC" ]; then
+	if [ -f "$CACHE_DIR/$DTS_ASSET" ]; then
+		DTS_SRC="$CACHE_DIR/$DTS_ASSET"
+	else
+		download_dts
+		verify_sha256 "$CACHE_DIR/$DTS_ASSET" "$DTS_SHA256"
+		DTS_SRC="$CACHE_DIR/$DTS_ASSET"
+	fi
+fi
 
 if [ ! -f "$DTB" ] || [ "$DTB" -ot "$DTS_SRC" ]; then
 	log "Compiling DTB: $DTS_SRC -> $DTB"
+	mkdir -p "$(dirname "$DTB")"
 	dtc -I dts -O dtb -o "$DTB" "$DTS_SRC"
 fi
 
