@@ -36,7 +36,7 @@ Detailed evidence is available in
 - [dtb/sun9i-a80-cubieboard4.dtb](dtb/sun9i-a80-cubieboard4.dtb): validated
   DTB for SD boot, USB Type-A, eMMC detection, and AP6330 SDIO WiFi.
 - [scripts/build-sd-image.sh](scripts/build-sd-image.sh): reproducible SD
-  image builder for Linux hosts.
+  image builder for Linux hosts. Supports `--interactive` wizard mode.
 - [scripts/install-to-emmc.sh](scripts/install-to-emmc.sh): conservative
   SD-to-eMMC rootfs installer for testing.
 - [docs/](docs/): consolidated status, test matrix, and technical references.
