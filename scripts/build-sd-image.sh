@@ -319,15 +319,15 @@ wizard() {
 	prompt_yn "Download missing assets"                    DOWNLOAD       1
 	prompt_yn "Compile DTB from DTS source"                SKIP_DTB_PHASE 1
 	prompt_yn "Install WiFi firmware (AP6330)"             WITH_FIRMWARE  1
-	prompt_yn "Install helper scripts (install-to-emmc, wifi-wizard)" WITH_INSTALLER 1
+	prompt_yn "Install install-to-emmc.sh helper"                WITH_INSTALLER  1
 	prompt_yn "Install extra packages (wpasupplicant, iw, parted)"  WITH_EXTRAS 1
 	prompt_yn "Write image to SD after build"              WRITE_SD       0
 
 	printf "\n  ${BOLD}Toggle steps by number, or press Enter to continue:${NC}\n"
 	printf "  1) Download missing assets\n"
 	printf "  2) Compile DTB from DTS\n"
-	printf "  3) Install WiFi firmware (AP6330)\n"
-	printf "  4) Install helper scripts\n"
+	printf "  3) Install WiFi firmware (AP6330) + wifi-wizard.sh\n"
+	printf "  4) Install install-to-emmc.sh\n"
 	printf "  5) Install extra packages\n"
 	printf "  6) Write image to SD after build\n"
 	printf "  a) All    n) None    d) Defaults\n"
@@ -517,16 +517,22 @@ install -D -m 0644 "$CACHE_DIR/$UBOOT_FIX_ASSET" "$ROOT_MOUNT/boot/u-boot-sunxi-
 # ── Install helper scripts ────────────────────────────────────
 if [ "$WIZARD" -eq 1 ]; then
 	if [ "$WITH_INSTALLER" -eq 1 ]; then
-		log "Installing helper scripts to /root/"
-		for script in install-to-emmc.sh wifi-wizard.sh; do
-			if [ -f "$(dirname "$0")/$script" ]; then
-				install -D -m 0755 "$(dirname "$0")/$script" "$ROOT_MOUNT/root/$script"
-			else
-				log "Downloading $script from upstream"
-				curl -sL --fail "$RAW_BASE/scripts/$script" -o "$ROOT_MOUNT/root/$script"
-				chmod 0755 "$ROOT_MOUNT/root/$script"
-			fi
-		done
+		log "Installing install-to-emmc.sh to /root/"
+		if [ -f "$(dirname "$0")/install-to-emmc.sh" ]; then
+			install -D -m 0755 "$(dirname "$0")/install-to-emmc.sh" "$ROOT_MOUNT/root/install-to-emmc.sh"
+		else
+			curl -sL --fail "$RAW_BASE/scripts/install-to-emmc.sh" -o "$ROOT_MOUNT/root/install-to-emmc.sh"
+			chmod 0755 "$ROOT_MOUNT/root/install-to-emmc.sh"
+		fi
+	fi
+	if [ "$WITH_FIRMWARE" -eq 1 ]; then
+		log "Installing wifi-wizard.sh to /root/"
+		if [ -f "$(dirname "$0")/wifi-wizard.sh" ]; then
+			install -D -m 0755 "$(dirname "$0")/wifi-wizard.sh" "$ROOT_MOUNT/root/wifi-wizard.sh"
+		else
+			curl -sL --fail "$RAW_BASE/scripts/wifi-wizard.sh" -o "$ROOT_MOUNT/root/wifi-wizard.sh"
+			chmod 0755 "$ROOT_MOUNT/root/wifi-wizard.sh"
+		fi
 	fi
 else
 	# Legacy prompt
