@@ -260,11 +260,10 @@ list_write_targets() {
 	if [ -n "$root_disk" ]; then
 		log "  root disk excluded: $root_disk"
 	fi
-	lsblk -dpno NAME,SIZE,TRAN,RM,MODEL | while read -r line; do
-		case "$line" in
-			"$root_disk "*) continue ;;
-		esac
-		printf '  %s\n' "$line"
+	lsblk -dpno NAME,SIZE,TRAN,RM,TYPE,MODEL | while read -r name size tran rm type model; do
+		[ "$type" = "disk" ] || continue
+		[ "$name" != "$root_disk" ] || continue
+		printf '  %-16s %-8s tran=%-8s removable=%s %s\n' "$name" "$size" "${tran:--}" "$rm" "$model"
 	done
 }
 
