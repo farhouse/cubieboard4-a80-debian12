@@ -50,30 +50,96 @@ check_prereqs() {
 	ok "All required tools found"
 }
 
+show_wifi_diagnostics() {
+	step "WiFi diagnostics"
+
+	info "Network interfaces:"
+	ls -1 /sys/class/net/ 2>/dev/null | while IFS= read -r iface; do
+		printf "  %-10s type=%s\n" "$iface" "$(cat "/sys/class/net/$iface/type" 2>/dev/null || echo '?')"
+	done
+
+	info ""
+	info "AP6330 firmware files:"
+	for fw in \
+		/lib/firmware/brcm/brcmfmac4330-sdio.bin \
+		/lib/firmware/brcm/brcmfmac4330-sdio.txt; do
+		if [ -f "$fw" ]; then
+			printf "  OK      %s (%s bytes)\n" "$fw" "$(stat -c%s "$fw" 2>/dev/null || echo '?')"
+		else
+			printf "  MISSING %s\n" "$fw"
+		fi
+	done
+
+	info ""
+	info "Broadcom kernel modules:"
+	if grep -E '^(brcmfmac|brcmutil|cfg80211) ' /proc/modules >/dev/null 2>&1; then
+		grep -E '^(brcmfmac|brcmutil|cfg80211) ' /proc/modules | while IFS= read -r line; do
+			printf "  %s\n" "$line"
+		done
+	else
+		printf "  none loaded\n"
+	fi
+
+	info ""
+	info "MMC/SDIO devices:"
+	if ls /sys/bus/mmc/devices/* >/dev/null 2>&1; then
+		for dev in /sys/bus/mmc/devices/*; do
+			[ -d "$dev" ] || continue
+			printf "  %s" "$(basename "$dev")"
+			[ -f "$dev/type" ] && printf " type=%s" "$(cat "$dev/type")"
+			[ -f "$dev/name" ] && printf " name=%s" "$(cat "$dev/name")"
+			printf "\n"
+		done
+	else
+		printf "  no MMC devices visible in sysfs\n"
+	fi
+
+	info ""
+	info "Recent kernel messages:"
+	dmesg 2>/dev/null | grep -Ei 'brcm|firmware|mmc1|1c10000|sdio|wlan|cfg80211|rfkill' | tail -40 | while IFS= read -r line; do
+		printf "  %s\n" "$line"
+	done
+}
+
+find_wifi_interface() {
+	if iw dev "$WIFI_DEV" info >/dev/null 2>&1; then
+		return 0
+	fi
+
+	WIFI_DEV=""
+	for dev in /sys/class/net/wlan*; do
+		[ -e "$dev" ] || continue
+		if iw dev "$(basename "$dev")" info >/dev/null 2>&1; then
+			WIFI_DEV="$(basename "$dev")"
+			return 0
+		fi
+	done
+
+	return 1
+}
+
 # ── Detect interface ───────────────────────────────────────────
 detect_wifi() {
 	step "Detect WiFi interface"
 	info "Looking for $WIFI_DEV..."
 
-	if ! iw dev "$WIFI_DEV" info >/dev/null 2>&1; then
-		# try to find any wlan interface
-		WIFI_DEV=""
-		for dev in /sys/class/net/wlan*; do
-			[ -e "$dev" ] || continue
-			if iw dev "$(basename "$dev")" info >/dev/null 2>&1; then
-				WIFI_DEV="$(basename "$dev")"
-				break
-			fi
-		done
-		if [ -z "$WIFI_DEV" ]; then
-			info "Available network interfaces:"
-			ls -1 /sys/class/net/ 2>/dev/null | while IFS= read -r iface; do
-				printf "  %-10s %s\n" "$iface" "$(cat "/sys/class/net/$iface/type" 2>/dev/null || echo '?')"
-			done
-			die "No WiFi interface found. Check if wlan0 exists (maybe needs rfkill unblock wifi)"
+	if ! find_wifi_interface; then
+		if command -v rfkill >/dev/null 2>&1; then
+			rfkill unblock wifi 2>/dev/null || true
+		fi
+		if command -v modprobe >/dev/null 2>&1; then
+			info "Loading brcmfmac module..."
+			modprobe brcmfmac 2>/dev/null || warn "modprobe brcmfmac failed"
+			sleep 2
 		fi
 	fi
 
+	if ! find_wifi_interface; then
+		show_wifi_diagnostics
+		die "No WiFi interface found. Check DTB mmc1, AP6330 firmware, and brcmfmac kernel messages above."
+	fi
+
+	local RFKILL
 	RFKILL=$(rfkill list wifi 2>/dev/null | grep -c "Soft blocked: yes") || true
 	if [ "$RFKILL" -gt 0 ]; then
 		info "WiFi blocked. Unblocking..."
