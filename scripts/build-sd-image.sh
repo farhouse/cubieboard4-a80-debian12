@@ -20,6 +20,7 @@ WITH_INSTALLER=1
 WITH_WIFI_WIZARD=1
 WITH_EXTRAS=0
 WRITE_SD=0
+SD_DEVICE=""
 CUSTOM_DTB=0
 
 BOOT_ASSET="boot-cubieboard4.bin.gz"
@@ -81,6 +82,7 @@ Options:
                        $EXTRA_PKGS
   --no-extras          Do not install convenience packages (default in CLI mode).
   --write-sd           Ask for a target block device and write the final image.
+  --sd-device DEV      Target block device for --write-sd, e.g. /dev/sdb.
   --skip-download      Reuse already cached assets only.
   -i, --interactive    Interactive wizard mode with image profiles and choices.
   -h, --help           Show this help.
@@ -241,6 +243,44 @@ validate_output_path() {
 	fi
 }
 
+list_write_targets() {
+	local root_source="" root_disk="" root_pk=""
+	root_source="$(findmnt -n -o SOURCE / 2>/dev/null || true)"
+	if [ -n "$root_source" ]; then
+		root_pk="$(lsblk -n -o PKNAME "$root_source" 2>/dev/null | head -1 || true)"
+		[ -n "$root_pk" ] && root_disk="/dev/$root_pk"
+	fi
+
+	log "Available block devices:"
+	if [ -n "$root_disk" ]; then
+		log "  root disk excluded: $root_disk"
+	fi
+	lsblk -dpno NAME,SIZE,TRAN,RM,MODEL | while read -r line; do
+		case "$line" in
+			"$root_disk "*) continue ;;
+		esac
+		printf '  %s\n' "$line"
+	done
+}
+
+choose_sd_device() {
+	local dev
+	list_write_targets
+	log ""
+	log "Enter the target device path for the microSD (e.g. /dev/sdb)."
+	log "Leave empty to build the image only."
+	printf "  ${BOLD}> ${NC}"
+	read -r dev </dev/tty
+	if [ -z "$dev" ]; then
+		WRITE_SD=0
+		SD_DEVICE=""
+		return 0
+	fi
+	[ -b "$dev" ] || die "not a block device: $dev"
+	WRITE_SD=1
+	SD_DEVICE="$dev"
+}
+
 extract_vendor_firmware() {
 	local archive="$CACHE_DIR/$VENDOR_SD_ASSET"
 	local extract_dir="$WORK_DIR/vendor-sd"
@@ -362,6 +402,9 @@ wizard_summary() {
 	printf "  wifi-wizard:       %b\n" "$(bool_word "$WITH_WIFI_WIZARD")"
 	printf "  Extra packages:    %b\n" "$(bool_word "$WITH_EXTRAS")"
 	printf "  Write to SD:       %b\n" "$(bool_word "$WRITE_SD")"
+	if [ "$WRITE_SD" -eq 1 ]; then
+		printf "  SD target:         %s\n" "$SD_DEVICE"
+	fi
 }
 
 wizard_custom_options() {
@@ -379,7 +422,12 @@ wizard_custom_options() {
 	fi
 	if ask_yn "Copy install-to-emmc.sh to /root?" "y"; then WITH_INSTALLER=1; else WITH_INSTALLER=0; fi
 	if ask_yn "Install convenience packages in the armhf rootfs?" "n"; then WITH_EXTRAS=1; else WITH_EXTRAS=0; fi
-	if ask_yn "Write the image to a microSD after building?" "n"; then WRITE_SD=1; else WRITE_SD=0; fi
+	if ask_yn "Write the image to a microSD after building?" "n"; then
+		choose_sd_device
+	else
+		WRITE_SD=0
+		SD_DEVICE=""
+	fi
 }
 
 wizard() {
@@ -428,7 +476,9 @@ wizard() {
 	esac
 
 	if [ "$choice" != "4" ]; then
-		if ask_yn "Write the image to a microSD after building?" "n"; then WRITE_SD=1; fi
+		if ask_yn "Write the image to a microSD after building?" "n"; then
+			choose_sd_device
+		fi
 	fi
 
 	wizard_summary
@@ -451,6 +501,7 @@ while [ "$#" -gt 0 ]; do
 		--with-extras) WITH_EXTRAS=1; shift ;;
 		--no-extras) WITH_EXTRAS=0; shift ;;
 		--write-sd) WRITE_SD=1; shift ;;
+		--sd-device)  [ "$#" -ge 2 ] || die "--sd-device requires a value"; SD_DEVICE="$2"; WRITE_SD=1; shift 2 ;;
 		--skip-download) DOWNLOAD=0; shift ;;
 		-i|--interactive) WIZARD=1; shift ;;
 		-h|--help) usage; exit 0 ;;
@@ -465,8 +516,10 @@ missing_pkgs=""
 require_cmd blkid         util-linux
 require_cmd curl          curl
 require_cmd dtc           device-tree-compiler
+require_cmd findmnt       util-linux
 require_cmd gzip          gzip
 require_cmd install       coreutils
+require_cmd lsblk         util-linux
 require_cmd losetup       util-linux
 require_cmd mkimage       u-boot-tools
 require_cmd mount         mount
@@ -702,18 +755,17 @@ log "Done: $OUTPUT"
 # ── Write to SD ────────────────────────────────────────────────
 if [ "$WRITE_SD" -eq 1 ]; then
 	log ""
-	log "Available disks (exclude the one with / mount):"
-	lsblk -dno NAME,SIZE,MODEL | grep -v '^loop'
+	if [ -z "$SD_DEVICE" ]; then
+		choose_sd_device
+	fi
+	[ "$WRITE_SD" -eq 1 ] || exit 0
+	[ -b "$SD_DEVICE" ] || die "not a block device: $SD_DEVICE"
 	log ""
-	log "Enter the device path (e.g. /dev/sdb):"
-	read -r sd_dev </dev/tty
-	[ -b "$sd_dev" ] || die "not a block device: $sd_dev"
-	log ""
-	log "WARNING: This will DESTROY ALL DATA on $sd_dev"
-	read -r -p "Are you sure? Type the device name to confirm ($(basename "$sd_dev")): " confirm </dev/tty
-	[ "$confirm" = "$(basename "$sd_dev")" ] || die "confirmation mismatch, aborting"
-	log "Writing $OUTPUT to $sd_dev ..."
-	dd if="$OUTPUT" of="$sd_dev" bs=4M conv=sync status=progress
+	log "WARNING: This will DESTROY ALL DATA on $SD_DEVICE"
+	read -r -p "Are you sure? Type the device name to confirm ($(basename "$SD_DEVICE")): " confirm </dev/tty
+	[ "$confirm" = "$(basename "$SD_DEVICE")" ] || die "confirmation mismatch, aborting"
+	log "Writing $OUTPUT to $SD_DEVICE ..."
+	dd if="$OUTPUT" of="$SD_DEVICE" bs=4M conv=sync status=progress
 	sync
 	log "Done. You can now remove the SD card."
 fi

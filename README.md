@@ -145,7 +145,9 @@ The wizard offers three ready-made profiles:
 - `Minimal`: bootable image only, without WiFi firmware or helper scripts.
 
 The custom profile lets you choose firmware source, helper scripts, extra
-packages, and whether to write the final image to a microSD card.
+packages, and whether to write the final image to a microSD card. If writing is
+enabled, the wizard lists candidate block devices immediately and stores the
+target for the final `dd` step.
 
 The script downloads the preserved assets from the GitHub Release
 `external-images-2026-05`, verifies SHA256 checksums, builds the SD image,
