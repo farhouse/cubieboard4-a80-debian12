@@ -130,14 +130,31 @@ sudo scripts/build-sd-image.sh \
   --output /tmp/cb4-bookworm/cubieboard4-a80-debian12-sd.img
 ```
 
+Interactive mode:
+
+```sh
+sudo scripts/build-sd-image.sh --interactive
+```
+
+The wizard offers three ready-made profiles:
+
+- `Recommended`: DTB, fixed U-Boot, AP6330 firmware, `install-to-emmc.sh`, and
+  `wifi-wizard.sh`.
+- `Field kit`: recommended image plus `parted`, `wpasupplicant`, and `iw`
+  installed inside the armhf rootfs.
+- `Minimal`: bootable image only, without WiFi firmware or helper scripts.
+
+The custom profile lets you choose firmware source, helper scripts, extra
+packages, and whether to write the final image to a microSD card.
+
 The script downloads the preserved assets from the GitHub Release
 `external-images-2026-05`, verifies SHA256 checksums, builds the SD image,
 compiles the validated DTB from `dts/sun9i-a80-cubieboard4.dts` (or uses
 `--dtb` to override), installs the fixed U-Boot binary
 (`u-boot-sunxi-with-spl.bin`) to `/boot/u-boot-sunxi-with-spl.bin`, and copies
-the AP6330 firmware using the filenames expected by `brcmfmac`. It also
-regenerates `/boot/boot.scr` so the kernel uses `root=UUID=...` instead of a
-fragile `/dev/mmcblkNp2` device name.
+the AP6330 firmware using the filenames expected by `brcmfmac` unless firmware
+is disabled. It also regenerates `/boot/boot.scr` so the kernel uses
+`root=UUID=...` instead of a fragile `/dev/mmcblkNp2` device name.
 
 The fixed U-Boot is required for eMMC boot without SD. When running the
 install-to-emmc.sh script on the CB4, it will flash this binary from

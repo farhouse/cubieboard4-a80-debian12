@@ -67,7 +67,7 @@ Estabilizar el boot de Cubieboard4 A80 con Debian 12 desde microSD, lograr image
 - Parche upstream enviado a `u-boot@lists.denx.de` con CC a Andre Przywara, Peng Fan, Jaehoon Chung.
 - DTB transferido a CB4 vía serial (base64 + tmux paste-buffer) ante falta de red.
 - `build-sd-image.sh`: refactor para compilar DTB desde `dts/` source en vez de descargar release asset. Eliminado `DTB_ASSET` y `DTB_SHA256`.
-- `build-sd-image.sh`: intento de wizard `--interactive` revertido por bugs; vuelto a CLI-only.
+- `build-sd-image.sh`: wizard `--interactive` reintroducido como perfiles de imagen (Recommended, Field kit, Minimal, Custom) para elegir firmware, helpers, paquetes extra y escritura a SD.
 - Documentación actualizada al 2026-05-27 (README, estado-validado, matriz, artefactos-externos, AGENTS).
 
 ### Next Steps

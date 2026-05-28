@@ -177,7 +177,7 @@ Configuracion validada:
 &mmc1_pins {
 	pins = "PG0", "PG1", "PG2", "PG3", "PG4", "PG5";
 	function = "mmc1";
-	drive-strength = <0x14>;
+	drive-strength = <0x1e>;
 	bias-pull-up;
 };
 ```
@@ -510,8 +510,8 @@ abd0c25 feat(wifi): enable AP6330 SDIO WiFi with vendor firmware
 db209b6 docs(handoff): add final session summary with USB + WiFi status
 c19557f fix(dts): mmc1-pins drive-strength 20→30 for AP6330 SDIO reliability
 dcd16de fix(build): update DTB SHA256 for drive-strength fix
-7cd1d4f fix(build): revert --interactive wizard; keep CLI-only
-0a335a6 feat(build): add --interactive flag to build-sd-image.sh (REVERTED)
+7cd1d4f fix(build): revert first --interactive wizard attempt; later reworked with image profiles
+0a335a6 feat(build): add first --interactive flag to build-sd-image.sh (superseded)
 2cc7e9d feat(install-to-emmc): rewrite as interactive wizard with step menu
 9d3c946 fix(install-to-emmc): sysfs partition path and fstab generation
 e2e4fb5 fix(emmc): get_mclk_offset() typo CONFIG_MACH_SUN9I_A80 → CONFIG_MACH_SUN9I

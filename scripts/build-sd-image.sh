@@ -17,8 +17,10 @@ WITH_FIRMWARE=1
 DOWNLOAD=1
 WIZARD=0
 WITH_INSTALLER=1
-WITH_EXTRAS=1
+WITH_WIFI_WIZARD=1
+WITH_EXTRAS=0
 WRITE_SD=0
+CUSTOM_DTB=0
 
 BOOT_ASSET="boot-cubieboard4.bin.gz"
 ROOTFS_ASSET="debian-bookworm-armhf-vim3ve.bin.gz"
@@ -73,8 +75,14 @@ Options:
   --firmware-dir DIR   Use AP6330 firmware from DIR instead of vendor image.
                        Expected files: fw_bcm40183b2_ag.bin, nvram_ap6330.txt
   --no-firmware        Do not install AP6330 WiFi firmware.
+  --no-installer       Do not copy install-to-emmc.sh into /root.
+  --no-wifi-wizard     Do not copy wifi-wizard.sh into /root.
+  --with-extras        Install convenience packages in the armhf rootfs:
+                       $EXTRA_PKGS
+  --no-extras          Do not install convenience packages (default in CLI mode).
+  --write-sd           Ask for a target block device and write the final image.
   --skip-download      Reuse already cached assets only.
-  -i, --interactive    Interactive wizard mode (step by step choices).
+  -i, --interactive    Interactive wizard mode with image profiles and choices.
   -h, --help           Show this help.
 
 Requirements:
@@ -99,6 +107,13 @@ require_cmd() {
 
 cleanup() {
 	set +e
+	if [ -n "$ROOT_MOUNT" ]; then
+		for bind_mount in "$ROOT_MOUNT/dev/pts" "$ROOT_MOUNT/sys" "$ROOT_MOUNT/dev" "$ROOT_MOUNT/proc"; do
+			if mountpoint -q "$bind_mount"; then
+				umount "$bind_mount"
+			fi
+		done
+	fi
 	if [ -n "$ROOT_MOUNT" ] && mountpoint -q "$ROOT_MOUNT"; then
 		umount "$ROOT_MOUNT"
 	fi
@@ -277,104 +292,165 @@ download_dts_if_missing() {
 }
 
 # ── Wizard ─────────────────────────────────────────────────────
-wizard() {
-	printf "\n${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-	printf "\n${BOLD}  Cubieboard4 A80 — SD Image Builder Wizard${NC}"
-	printf "\n${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
-
-	DOWNLOAD=1; WITH_FIRMWARE=1; WITH_INSTALLER=1; WITH_EXTRAS=1; WRITE_SD=0
-
-	# Show work dir
-	[ -n "$OUTPUT" ] && img="$OUTPUT" || img="$WORK_DIR/cubieboard4-a80-debian12-sd.img"
-	printf "\n  ${BOLD}Work dir:${NC}  $WORK_DIR"
-	printf "\n  ${BOLD}Image:${NC}     $img\n"
-
-	# Asset status
-	printf "\n  ${BOLD}Cached assets:${NC}\n"
-	asset_ok()   { printf "  ${GREEN}✔${NC} %s\n" "$1"; }
-	asset_miss() { printf "  ${YELLOW}⚠${NC} %s\n" "$1"; }
-	for pair in \
-		"$BOOT_ASSET:boot image" \
-		"$ROOTFS_ASSET:Debian rootfs" \
-		"$UBOOT_FIX_ASSET:fixed U-Boot" \
-		"$VENDOR_SD_ASSET:vendor SD (firmware source)"; do
-		f="${pair%%:*}"
-		l="${pair#*:}"
-		[ -f "$CACHE_DIR/$f" ] && asset_ok "$l" || asset_miss "$l"
-	done
-	if [ -f "$DTS_SRC" ] || [ -f "$CACHE_DIR/$DTS_ASSET" ]; then
-		asset_ok "DTS source"
+bool_word() {
+	if [ "$1" -eq 1 ]; then
+		printf "${GREEN}yes${NC}"
 	else
-		asset_miss "DTS source"
+		printf "${RED}no${NC}"
 	fi
+}
 
-	# Build checklist
-	printf "\n  ${BOLD}Build checklist:${NC}\n"
-	prompt_yn() {
-		local label="$1" var_name="$2" default="$3"
-		local current; eval "current=\${$var_name}"
-		[ "$current" -eq 1 ] && c="${GREEN}Y${NC}" || c="${RED}n${NC}"
-		printf "  [${c}]  %s\n" "$label"
-	}
-	prompt_yn "Download missing assets"                    DOWNLOAD       1
-	prompt_yn "Compile DTB from DTS source"                SKIP_DTB_PHASE 1
-	prompt_yn "Install WiFi firmware (AP6330)"             WITH_FIRMWARE  1
-	prompt_yn "Install install-to-emmc.sh helper"                WITH_INSTALLER  1
-	prompt_yn "Install extra packages (wpasupplicant, iw, parted)"  WITH_EXTRAS 1
-	prompt_yn "Write image to SD after build"              WRITE_SD       0
-
-	printf "\n  ${BOLD}Toggle steps by number, or press Enter to continue:${NC}\n"
-	printf "  1) Download missing assets\n"
-	printf "  2) Compile DTB from DTS\n"
-	printf "  3) Install WiFi firmware (AP6330) + wifi-wizard.sh\n"
-	printf "  4) Install install-to-emmc.sh\n"
-	printf "  5) Install extra packages\n"
-	printf "  6) Write image to SD after build\n"
-	printf "  a) All    n) None    d) Defaults\n"
-	printf "  ${BOLD}> ${NC}"
-	read -r wizard_reply </dev/tty
-
-	[ -z "$wizard_reply" ] && return 0
-
-	case "$wizard_reply" in
-		a|A) DOWNLOAD=1; WITH_FIRMWARE=1; WITH_INSTALLER=1; WITH_EXTRAS=1; WRITE_SD=1 ;;
-		n|N) DOWNLOAD=0; WITH_FIRMWARE=0; WITH_INSTALLER=0; WITH_EXTRAS=0; WRITE_SD=0 ;;
-		d|D) DOWNLOAD=1; WITH_FIRMWARE=1; WITH_INSTALLER=1; WITH_EXTRAS=1; WRITE_SD=0 ;;
-		*)
-			for num in $wizard_reply; do
-				case "$num" in
-					1) [ "$DOWNLOAD" -eq 1 ] && DOWNLOAD=0 || DOWNLOAD=1 ;;
-					2) SKIP_DTB_PHASE=$((1 - SKIP_DTB_PHASE)) ;;
-					3) [ "$WITH_FIRMWARE" -eq 1 ] && WITH_FIRMWARE=0 || WITH_FIRMWARE=1 ;;
-					4) [ "$WITH_INSTALLER" -eq 1 ] && WITH_INSTALLER=0 || WITH_INSTALLER=1 ;;
-					5) [ "$WITH_EXTRAS" -eq 1 ] && WITH_EXTRAS=0 || WITH_EXTRAS=1 ;;
-					6) [ "$WRITE_SD" -eq 1 ] && WRITE_SD=0 || WRITE_SD=1 ;;
-				esac
-			done
-			# Show final state
-			printf "\n  Final selection:\n"
-			printf "  %s Download\n"       "$([ "$DOWNLOAD" -eq 1 ] && echo "${GREEN}✔${NC}" || echo "${RED}✖${NC}")"
-			printf "  %s Compile DTB\n"    "$([ "$SKIP_DTB_PHASE" -eq 1 ] && echo "${GREEN}✔${NC}" || echo "${RED}✖${NC}")"
-			printf "  %s WiFi firmware\n"  "$([ "$WITH_FIRMWARE" -eq 1 ] && echo "${GREEN}✔${NC}" || echo "${RED}✖${NC}")"
-			printf "  %s Helper scripts\n" "$([ "$WITH_INSTALLER" -eq 1 ] && echo "${GREEN}✔${NC}" || echo "${RED}✖${NC}")"
-			printf "  %s Extra packages\n" "$([ "$WITH_EXTRAS" -eq 1 ] && echo "${GREEN}✔${NC}" || echo "${RED}✖${NC}")"
-			printf "  %s Write to SD\n"    "$([ "$WRITE_SD" -eq 1 ] && echo "${GREEN}✔${NC}" || echo "${RED}✖${NC}")"
-			printf "  ${BOLD}Proceed? [Y/n] ${NC}"
-			read -r confirm </dev/tty
-			case "$confirm" in [nN]*) die "aborted" ;; esac
-			;;
+ask_yn() {
+	local prompt="$1"
+	local default="${2:-y}"
+	local reply suffix
+	if [ "$default" = "y" ]; then suffix="[Y/n]"; else suffix="[y/N]"; fi
+	printf "  ${BOLD}%s %s ${NC}" "$prompt" "$suffix"
+	read -r reply </dev/tty
+	case "$reply" in
+		[yY]*) return 0 ;;
+		[nN]*) return 1 ;;
+		*) [ "$default" = "y" ] ;;
 	esac
 }
 
+wizard_asset_status() {
+	printf "\n  ${BOLD}Cached assets:${NC}\n"
+	for pair in \
+		"$BOOT_ASSET:boot image" \
+		"$ROOTFS_ASSET:Debian rootfs" \
+		"$UBOOT_FIX_ASSET:fixed U-Boot"; do
+		local file="${pair%%:*}"
+		local label="${pair#*:}"
+		if [ -f "$CACHE_DIR/$file" ]; then
+			printf "  ${GREEN}ok${NC}   %s\n" "$label"
+		else
+			printf "  ${YELLOW}miss${NC} %s\n" "$label"
+		fi
+	done
+	if [ -n "$FIRMWARE_DIR" ]; then
+		printf "  ${GREEN}ok${NC}   firmware dir: %s\n" "$FIRMWARE_DIR"
+	elif [ -f "$CACHE_DIR/$VENDOR_SD_ASSET" ]; then
+		printf "  ${GREEN}ok${NC}   vendor SD firmware source\n"
+	else
+		printf "  ${YELLOW}miss${NC} vendor SD firmware source\n"
+	fi
+	if [ "$CUSTOM_DTB" -eq 1 ]; then
+		printf "  ${GREEN}ok${NC}   custom DTB: %s\n" "$DTB"
+	elif [ -f "$DTS_SRC" ] || [ -f "$CACHE_DIR/$DTS_ASSET" ]; then
+		printf "  ${GREEN}ok${NC}   DTS source\n"
+	else
+		printf "  ${YELLOW}miss${NC} DTS source\n"
+	fi
+}
+
+wizard_summary() {
+	local img
+	[ -n "$OUTPUT" ] && img="$OUTPUT" || img="$WORK_DIR/cubieboard4-a80-debian12-sd.img"
+	printf "\n  ${BOLD}Selected build:${NC}\n"
+	printf "  Work dir:          %s\n" "$WORK_DIR"
+	printf "  Output image:      %s\n" "$img"
+	printf "  Download missing:  %b\n" "$(bool_word "$DOWNLOAD")"
+	if [ "$CUSTOM_DTB" -eq 1 ]; then
+		printf "  DTB:               custom file: %s\n" "$DTB"
+	else
+		printf "  DTB:               compile from %s\n" "$DTS_SRC"
+	fi
+	printf "  Fixed U-Boot:      always installed\n"
+	printf "  AP6330 firmware:   %b\n" "$(bool_word "$WITH_FIRMWARE")"
+	printf "  install-to-emmc:   %b\n" "$(bool_word "$WITH_INSTALLER")"
+	printf "  wifi-wizard:       %b\n" "$(bool_word "$WITH_WIFI_WIZARD")"
+	printf "  Extra packages:    %b\n" "$(bool_word "$WITH_EXTRAS")"
+	printf "  Write to SD:       %b\n" "$(bool_word "$WRITE_SD")"
+}
+
+wizard_custom_options() {
+	if ask_yn "Download missing release assets?" "y"; then DOWNLOAD=1; else DOWNLOAD=0; fi
+	if ask_yn "Install AP6330 WiFi firmware?" "y"; then WITH_FIRMWARE=1; else WITH_FIRMWARE=0; fi
+	if [ "$WITH_FIRMWARE" -eq 1 ]; then
+		if ask_yn "Use an already extracted firmware directory?" "n"; then
+			printf "  ${BOLD}Firmware directory: ${NC}"
+			read -r FIRMWARE_DIR </dev/tty
+			[ -d "$FIRMWARE_DIR" ] || die "firmware directory not found: $FIRMWARE_DIR"
+		fi
+		if ask_yn "Copy wifi-wizard.sh to /root?" "y"; then WITH_WIFI_WIZARD=1; else WITH_WIFI_WIZARD=0; fi
+	else
+		WITH_WIFI_WIZARD=0
+	fi
+	if ask_yn "Copy install-to-emmc.sh to /root?" "y"; then WITH_INSTALLER=1; else WITH_INSTALLER=0; fi
+	if ask_yn "Install convenience packages in the armhf rootfs?" "n"; then WITH_EXTRAS=1; else WITH_EXTRAS=0; fi
+	if ask_yn "Write the image to a microSD after building?" "n"; then WRITE_SD=1; else WRITE_SD=0; fi
+}
+
+wizard() {
+	local choice
+	printf "\n${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+	printf "\n${BOLD}  Cubieboard4 A80 SD Image Builder${NC}"
+	printf "\n${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+
+	wizard_asset_status
+	printf "\n  ${BOLD}Paths:${NC}\n"
+	printf "  Work dir: %s\n" "$WORK_DIR"
+	if [ -n "$OUTPUT" ]; then
+		printf "  Output:   %s\n" "$OUTPUT"
+	else
+		printf "  Output:   %s\n" "$WORK_DIR/cubieboard4-a80-debian12-sd.img"
+	fi
+
+	printf "\n  ${BOLD}Choose an image profile:${NC}\n"
+	printf "  1) Recommended  DTB + fixed U-Boot + WiFi firmware + helper scripts\n"
+	printf "  2) Field kit    Recommended + apt packages: %s\n" "$EXTRA_PKGS"
+	printf "  3) Minimal      Bootable image only, no WiFi firmware or helper scripts\n"
+	printf "  4) Custom       Choose each optional step\n"
+	printf "  ${BOLD}> ${NC}"
+	read -r choice </dev/tty
+	[ -n "$choice" ] || choice=1
+
+	case "$choice" in
+		1)
+			DOWNLOAD=1; WITH_FIRMWARE=1; WITH_WIFI_WIZARD=1
+			WITH_INSTALLER=1; WITH_EXTRAS=0; WRITE_SD=0
+			;;
+		2)
+			DOWNLOAD=1; WITH_FIRMWARE=1; WITH_WIFI_WIZARD=1
+			WITH_INSTALLER=1; WITH_EXTRAS=1; WRITE_SD=0
+			;;
+		3)
+			DOWNLOAD=1; WITH_FIRMWARE=0; WITH_WIFI_WIZARD=0
+			WITH_INSTALLER=0; WITH_EXTRAS=0; WRITE_SD=0
+			;;
+		4)
+			wizard_custom_options
+			;;
+		*)
+			die "unknown profile: $choice"
+			;;
+	esac
+
+	if [ "$choice" != "4" ]; then
+		if ask_yn "Write the image to a microSD after building?" "n"; then WRITE_SD=1; fi
+	fi
+
+	wizard_summary
+	printf "\n"
+	ask_yn "Proceed with this build?" "y" || die "aborted"
+}
+
 # ── Argument parsing ───────────────────────────────────────────
+HAD_ARGS=$#
 while [ "$#" -gt 0 ]; do
 	case "$1" in
 		--output)     [ "$#" -ge 2 ] || die "--output requires a value"; OUTPUT="$2"; shift 2 ;;
 		--work-dir)   [ "$#" -ge 2 ] || die "--work-dir requires a value"; WORK_DIR="$2"; shift 2 ;;
 		--release-base) [ "$#" -ge 2 ] || die "--release-base requires a value"; RELEASE_BASE="${2%/}"; shift 2 ;;
-		--dtb)        [ "$#" -ge 2 ] || die "--dtb requires a value"; DTB="$2"; shift 2 ;;
+		--dtb)        [ "$#" -ge 2 ] || die "--dtb requires a value"; DTB="$2"; CUSTOM_DTB=1; shift 2 ;;
 		--firmware-dir) [ "$#" -ge 2 ] || die "--firmware-dir requires a value"; FIRMWARE_DIR="$2"; shift 2 ;;
 		--no-firmware) WITH_FIRMWARE=0; shift ;;
+		--no-installer) WITH_INSTALLER=0; shift ;;
+		--no-wifi-wizard) WITH_WIFI_WIZARD=0; shift ;;
+		--with-extras) WITH_EXTRAS=1; shift ;;
+		--no-extras) WITH_EXTRAS=0; shift ;;
+		--write-sd) WRITE_SD=1; shift ;;
 		--skip-download) DOWNLOAD=0; shift ;;
 		-i|--interactive) WIZARD=1; shift ;;
 		-h|--help) usage; exit 0 ;;
@@ -402,16 +478,16 @@ require_cmd umount        mount
 CACHE_DIR="$WORK_DIR/cache"
 mkdir -p "$CACHE_DIR"
 
-# Auto-detect TTY: if no --output and no --no-* flags and TTY available, go wizard
-if [ "$WIZARD" -eq 0 ] && [ -t 0 ] && [ -z "$OUTPUT" ] && [ "$WITH_FIRMWARE" -eq 1 ] && [ "$DOWNLOAD" -eq 1 ]; then
+# Auto-start the wizard only for a plain interactive invocation.
+if [ "$WIZARD" -eq 0 ] && [ "$HAD_ARGS" -eq 0 ] && [ -t 0 ]; then
 	WIZARD=1
 fi
 
 if [ "$WIZARD" -eq 1 ]; then
 	wizard
-	# If wizard disabled firmware, skip 7z requirement
 	if [ "$WITH_FIRMWARE" -eq 0 ]; then
 		FIRMWARE_DIR=""
+		WITH_WIFI_WIZARD=0
 	fi
 fi
 
@@ -421,12 +497,16 @@ fi
 
 if [ -n "$missing_pkgs" ]; then
 	log "Missing packages:$missing_pkgs"
-	read -r -p "Install them with apt? [Y/n] " reply </dev/tty
-	case "$reply" in
-		[nN]*) die "install required packages manually: apt install$missing_pkgs" ;;
-	esac
-	# shellcheck disable=SC2086
-	apt update && apt install -y $missing_pkgs
+	if [ "$WIZARD" -eq 1 ] && [ -r /dev/tty ]; then
+		read -r -p "Install them with apt? [Y/n] " reply </dev/tty
+		case "$reply" in
+			[nN]*) die "install required packages manually: apt install$missing_pkgs" ;;
+		esac
+		# shellcheck disable=SC2086
+		apt update && apt install -y $missing_pkgs
+	else
+		die "install required packages manually: apt install$missing_pkgs"
+	fi
 fi
 
 # ── Asset status display ───────────────────────────────────────
@@ -444,8 +524,15 @@ check_asset() {
 check_asset "Boot image"            "$CACHE_DIR/$BOOT_ASSET"
 check_asset "Debian rootfs"         "$CACHE_DIR/$ROOTFS_ASSET"
 check_asset "Fixed U-Boot"          "$CACHE_DIR/$UBOOT_FIX_ASSET"
-check_asset "Vendor SD (firmware)"  "$CACHE_DIR/$VENDOR_SD_ASSET"
-if [ -f "$DTS_SRC" ]; then
+if [ "$WITH_FIRMWARE" -eq 1 ] && [ -z "$FIRMWARE_DIR" ]; then
+	check_asset "Vendor SD (firmware)"  "$CACHE_DIR/$VENDOR_SD_ASSET"
+else
+	log "  [SKIP] Vendor SD (firmware)"
+fi
+if [ "$CUSTOM_DTB" -eq 1 ]; then
+	[ -f "$DTB" ] || die "custom DTB not found: $DTB"
+	log "  [OK]   Custom DTB ($DTB)"
+elif [ -f "$DTS_SRC" ]; then
 	log "  [OK]   DTS source ($DTS_SRC)"
 elif [ -f "$CACHE_DIR/$DTS_ASSET" ]; then
 	log "  [OK]   DTS source (cached: $CACHE_DIR/$DTS_ASSET)"
@@ -458,21 +545,19 @@ log ""
 
 # ── DTS → DTB ──────────────────────────────────────────────────
 log "--- DTS / DTB ---"
-download_dts_if_missing
-verify_sha256 "$DTS_SRC" "$DTS_SHA256"
-
-if [ ! -f "$DTB" ] || [ "$DTB" -ot "$DTS_SRC" ]; then
-	log "Compiling DTB: $DTS_SRC -> $DTB"
-	mkdir -p "$(dirname "$DTB")"
-	dtc -I dts -O dtb -o "$DTB" "$DTS_SRC"
+if [ "$CUSTOM_DTB" -eq 1 ]; then
+	log "Using custom DTB: $DTB"
 else
-	log "DTB is up to date: $DTB"
-fi
+	download_dts_if_missing
+	verify_sha256 "$DTS_SRC" "$DTS_SHA256"
 
-# ── Download prompt for release assets ─────────────────────────
-if [ "$DOWNLOAD" -eq 1 ] && [ "$missing" -eq 1 ]; then
-	read -r -p "Download missing assets? [Y/n] " reply </dev/tty
-	case "$reply" in [nN]*) die "aborted by user" ;; esac
+	if [ ! -f "$DTB" ] || [ "$DTB" -ot "$DTS_SRC" ]; then
+		log "Compiling DTB: $DTS_SRC -> $DTB"
+		mkdir -p "$(dirname "$DTB")"
+		dtc -I dts -O dtb -o "$DTB" "$DTS_SRC"
+	else
+		log "DTB is up to date: $DTB"
+	fi
 fi
 
 # ── Build image ────────────────────────────────────────────────
@@ -515,42 +600,28 @@ verify_sha256 "$CACHE_DIR/$UBOOT_FIX_ASSET" "$UBOOT_FIX_SHA256"
 install -D -m 0644 "$CACHE_DIR/$UBOOT_FIX_ASSET" "$ROOT_MOUNT/boot/u-boot-sunxi-with-spl.bin"
 
 # ── Install helper scripts ────────────────────────────────────
-if [ "$WIZARD" -eq 1 ]; then
-	if [ "$WITH_INSTALLER" -eq 1 ]; then
-		log "Installing install-to-emmc.sh to /root/"
-		if [ -f "$(dirname "$0")/install-to-emmc.sh" ]; then
-			install -D -m 0755 "$(dirname "$0")/install-to-emmc.sh" "$ROOT_MOUNT/root/install-to-emmc.sh"
-		else
-			curl -sL --fail "$RAW_BASE/scripts/install-to-emmc.sh" -o "$ROOT_MOUNT/root/install-to-emmc.sh"
-			chmod 0755 "$ROOT_MOUNT/root/install-to-emmc.sh"
-		fi
-	fi
-	if [ "$WITH_FIRMWARE" -eq 1 ]; then
-		log "Installing wifi-wizard.sh to /root/"
-		if [ -f "$(dirname "$0")/wifi-wizard.sh" ]; then
-			install -D -m 0755 "$(dirname "$0")/wifi-wizard.sh" "$ROOT_MOUNT/root/wifi-wizard.sh"
-		else
-			curl -sL --fail "$RAW_BASE/scripts/wifi-wizard.sh" -o "$ROOT_MOUNT/root/wifi-wizard.sh"
-			chmod 0755 "$ROOT_MOUNT/root/wifi-wizard.sh"
-		fi
+if [ "$WITH_INSTALLER" -eq 1 ]; then
+	log "Installing install-to-emmc.sh to /root/"
+	if [ -f "$(dirname "$0")/install-to-emmc.sh" ]; then
+		install -D -m 0755 "$(dirname "$0")/install-to-emmc.sh" "$ROOT_MOUNT/root/install-to-emmc.sh"
+	else
+		curl -sL --fail "$RAW_BASE/scripts/install-to-emmc.sh" -o "$ROOT_MOUNT/root/install-to-emmc.sh"
+		chmod 0755 "$ROOT_MOUNT/root/install-to-emmc.sh"
 	fi
 else
-	# Legacy prompt
-	read -r -p "Include install-to-emmc.sh on the image? [Y/n] " reply_installer </dev/tty
-	case "$reply_installer" in
-		[nN]*) log "Skipping install-to-emmc.sh" ;;
-		*)
-			log "Installing install-to-emmc.sh to /root/"
-			if [ -f "$(dirname "$0")/install-to-emmc.sh" ]; then
-				install -D -m 0755 "$(dirname "$0")/install-to-emmc.sh" "$ROOT_MOUNT/root/install-to-emmc.sh"
-			else
-				log "Downloading install-to-emmc.sh from upstream"
-				curl -sL --fail "$RAW_BASE/scripts/install-to-emmc.sh" \
-					-o "$ROOT_MOUNT/root/install-to-emmc.sh"
-				chmod 0755 "$ROOT_MOUNT/root/install-to-emmc.sh"
-			fi
-			;;
-	esac
+	log "Skipping install-to-emmc.sh"
+fi
+
+if [ "$WITH_WIFI_WIZARD" -eq 1 ]; then
+	log "Installing wifi-wizard.sh to /root/"
+	if [ -f "$(dirname "$0")/wifi-wizard.sh" ]; then
+		install -D -m 0755 "$(dirname "$0")/wifi-wizard.sh" "$ROOT_MOUNT/root/wifi-wizard.sh"
+	else
+		curl -sL --fail "$RAW_BASE/scripts/wifi-wizard.sh" -o "$ROOT_MOUNT/root/wifi-wizard.sh"
+		chmod 0755 "$ROOT_MOUNT/root/wifi-wizard.sh"
+	fi
+else
+	log "Skipping wifi-wizard.sh"
 fi
 
 write_sd_boot_script "$root_part" "$ROOT_MOUNT"
@@ -567,8 +638,8 @@ else
 fi
 
 # ── Extra packages ─────────────────────────────────────────────
-if [ "$WIZARD" -eq 1 ] && [ "$WITH_EXTRAS" -eq 0 ]; then
-	log "Skipping extra packages (disabled in wizard)"
+if [ "$WITH_EXTRAS" -eq 0 ]; then
+	log "Skipping extra packages"
 	HAVE_QEMU=0
 else
 	log ""
@@ -577,15 +648,19 @@ else
 		HAVE_QEMU=1
 	else
 		log "qemu-arm-static not found (needed to install extra packages in the armhf rootfs)"
-		read -r -p "Install qemu-user-static? [Y/n] " reply_qemu </dev/tty
-		case "$reply_qemu" in
-			[nN]*) HAVE_QEMU=0 ;;
-			*)
-				apt install -y qemu-user-static
-				if command -v qemu-arm-static >/dev/null 2>&1; then HAVE_QEMU=1
-				else log "qemu-user-static installation failed"; HAVE_QEMU=0; fi
-				;;
-		esac
+		if [ "$WIZARD" -eq 1 ] && [ -r /dev/tty ]; then
+			read -r -p "Install qemu-user-static? [Y/n] " reply_qemu </dev/tty
+			case "$reply_qemu" in
+				[nN]*) HAVE_QEMU=0 ;;
+				*)
+					apt install -y qemu-user-static
+					if command -v qemu-arm-static >/dev/null 2>&1; then HAVE_QEMU=1
+					else log "qemu-user-static installation failed"; HAVE_QEMU=0; fi
+					;;
+			esac
+		else
+			HAVE_QEMU=0
+		fi
 	fi
 fi
 
@@ -641,27 +716,4 @@ if [ "$WRITE_SD" -eq 1 ]; then
 	dd if="$OUTPUT" of="$sd_dev" bs=4M conv=sync status=progress
 	sync
 	log "Done. You can now remove the SD card."
-elif [ "$WIZARD" -eq 0 ]; then
-	# Legacy prompt for non-wizard mode
-	log ""
-	read -r -p "Write this image to an SD card? [y/N] " reply </dev/tty
-	case "$reply" in
-		[yY]*)
-			log ""
-			log "Available disks (exclude the one with / mount):"
-			lsblk -dno NAME,SIZE,MODEL | grep -v '^loop'
-			log ""
-			log "Enter the device path (e.g. /dev/sdb):"
-			read -r sd_dev </dev/tty
-			[ -b "$sd_dev" ] || die "not a block device: $sd_dev"
-			log ""
-			log "WARNING: This will DESTROY ALL DATA on $sd_dev"
-			read -r -p "Are you sure? Type the device name to confirm ($(basename "$sd_dev")): " confirm </dev/tty
-			[ "$confirm" = "$(basename "$sd_dev")" ] || die "confirmation mismatch, aborting"
-			log "Writing $OUTPUT to $sd_dev ..."
-			dd if="$OUTPUT" of="$sd_dev" bs=4M conv=sync status=progress
-			sync
-			log "Done. You can remove the SD card."
-			;;
-	esac
 fi
