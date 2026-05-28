@@ -120,9 +120,15 @@ download_asset() {
 
 	log "Downloading: $url"
 	if command -v curl >/dev/null 2>&1; then
-		curl -sL --connect-timeout 15 --max-time 120 --fail --output "$dest.tmp" "$url" || die "curl failed — check network / URL: $url"
+		curl -L --connect-timeout 15 --max-time 120 --fail --output "$dest.tmp" "$url" || {
+			log "curl failed with exit code $?"
+			die "curl failed — check network / URL: $url"
+		}
 	elif command -v wget >/dev/null 2>&1; then
-		wget --timeout=15 -O "$dest.tmp" "$url" || die "wget failed — check network / URL: $url"
+		wget --timeout=15 -O "$dest.tmp" "$url" || {
+			log "wget failed with exit code $?"
+			die "wget failed — check network / URL: $url"
+		}
 	else
 		die "required command not found: curl or wget"
 	fi
@@ -369,39 +375,35 @@ else
 fi
 log ""
 
-download_dts() {
-	local dest="$CACHE_DIR/$DTS_ASSET"
-	local url="$RAW_BASE/$DTS_ASSET"
-	local tmpf="${dest}.tmp-$$"
-
-	if [ -f "$dest" ]; then
-		log "Using cached DTS: $dest"
-		return 0
-	fi
-
-	[ "$DOWNLOAD" -eq 1 ] || die "missing cached DTS and --skip-download was used: $dest"
-
-	log "Downloading: $url"
-	if command -v curl >/dev/null 2>&1; then
-		curl -sL --connect-timeout 15 --max-time 60 --fail --output "$tmpf" "$url" || die "curl failed — check network / URL: $url"
-	elif command -v wget >/dev/null 2>&1; then
-		wget --timeout=15 -O "$tmpf" "$url" || die "wget failed — check network / URL: $url"
-	else
-		die "required command not found: curl or wget"
-	fi
-	mv "$tmpf" "$dest"
-}
-
 # Ensure DTS is available — download from raw GitHub if missing
 if [ ! -f "$DTS_SRC" ]; then
 	if [ -f "$CACHE_DIR/$DTS_ASSET" ]; then
+		log "Using cached DTS: $CACHE_DIR/$DTS_ASSET"
 		DTS_SRC="$CACHE_DIR/$DTS_ASSET"
 	else
-		download_dts
-		verify_sha256 "$CACHE_DIR/$DTS_ASSET" "$DTS_SHA256"
-		DTS_SRC="$CACHE_DIR/$DTS_ASSET"
+		local dts_url="$RAW_BASE/$DTS_ASSET"
+		local dts_dest="$CACHE_DIR/$DTS_ASSET"
+		local dts_tmp="${dts_dest}.tmp-$$"
+		log "Downloading DTS: $dts_url"
+		if command -v curl >/dev/null 2>&1; then
+			curl -L --connect-timeout 15 --max-time 60 --fail --output "$dts_tmp" "$dts_url" || {
+				rc_curl=$?
+				log "curl exit code: $rc_curl"
+				die "curl failed (exit $rc_curl) — check network / URL: $dts_url"
+			}
+		elif command -v wget >/dev/null 2>&1; then
+			wget --timeout=15 -O "$dts_tmp" "$dts_url" || {
+				rc_wget=$?
+				die "wget failed (exit $rc_wget) — check network / URL: $dts_url"
+			}
+		else
+			die "required command not found: curl or wget"
+		fi
+		mv "$dts_tmp" "$dts_dest"
+		DTS_SRC="$dts_dest"
 	fi
 fi
+verify_sha256 "$DTS_SRC" "$DTS_SHA256"
 
 if [ ! -f "$DTB" ] || [ "$DTB" -ot "$DTS_SRC" ]; then
 	log "Compiling DTB: $DTS_SRC -> $DTB"
