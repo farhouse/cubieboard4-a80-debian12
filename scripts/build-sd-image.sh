@@ -120,9 +120,9 @@ download_asset() {
 
 	log "Downloading: $url"
 	if command -v curl >/dev/null 2>&1; then
-		curl -L --fail --output "$dest.tmp" "$url"
+		curl -sL --connect-timeout 15 --max-time 120 --fail --output "$dest.tmp" "$url" || die "curl failed — check network / URL: $url"
 	elif command -v wget >/dev/null 2>&1; then
-		wget -O "$dest.tmp" "$url"
+		wget --timeout=15 -O "$dest.tmp" "$url" || die "wget failed — check network / URL: $url"
 	else
 		die "required command not found: curl or wget"
 	fi
@@ -372,6 +372,7 @@ log ""
 download_dts() {
 	local dest="$CACHE_DIR/$DTS_ASSET"
 	local url="$RAW_BASE/$DTS_ASSET"
+	local tmpf="${dest}.tmp-$$"
 
 	if [ -f "$dest" ]; then
 		log "Using cached DTS: $dest"
@@ -382,13 +383,13 @@ download_dts() {
 
 	log "Downloading: $url"
 	if command -v curl >/dev/null 2>&1; then
-		curl -sL --fail --output "$dest.tmp" "$url"
+		curl -sL --connect-timeout 15 --max-time 60 --fail --output "$tmpf" "$url" || die "curl failed — check network / URL: $url"
 	elif command -v wget >/dev/null 2>&1; then
-		wget -O "$dest.tmp" "$url"
+		wget --timeout=15 -O "$tmpf" "$url" || die "wget failed — check network / URL: $url"
 	else
 		die "required command not found: curl or wget"
 	fi
-	mv "$dest.tmp" "$dest"
+	mv "$tmpf" "$dest"
 }
 
 # Ensure DTS is available — download from raw GitHub if missing
