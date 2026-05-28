@@ -384,6 +384,7 @@ if [ ! -f "$DTS_SRC" ]; then
 		dts_url="$RAW_BASE/$DTS_ASSET"
 		dts_dest="$CACHE_DIR/$DTS_ASSET"
 		dts_tmp="${dts_dest}.tmp-$$"
+		mkdir -p "$(dirname "$dts_dest")"
 		log "Downloading DTS: $dts_url"
 		if command -v curl >/dev/null 2>&1; then
 			curl -L --connect-timeout 15 --max-time 60 --fail --output "$dts_tmp" "$dts_url" || {
