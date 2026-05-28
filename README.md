@@ -138,10 +138,11 @@ sudo scripts/build-sd-image.sh --interactive
 
 The wizard offers three ready-made profiles:
 
-- `Recommended`: DTB, fixed U-Boot, AP6330 firmware, `install-to-emmc.sh`, and
+- `Recommended`: DTB, fixed U-Boot, AP6330 firmware, WiFi runtime tools
+  (`iw`, `wpasupplicant`, `isc-dhcp-client`), `install-to-emmc.sh`, and
   `wifi-wizard.sh`.
-- `Field kit`: recommended image plus `parted`, `wpasupplicant`, and `iw`
-  installed inside the armhf rootfs.
+- `Field kit`: recommended image plus `parted` installed inside the armhf
+  rootfs.
 - `Minimal`: bootable image only, without WiFi firmware or helper scripts.
 
 The custom profile lets you choose firmware source, helper scripts, extra
@@ -169,6 +170,8 @@ Host requirements:
 - `sha256sum`, `gzip`, `dtc` (device-tree-compiler), `blkid`, `losetup`, `mount`, `umount`;
 - `mkimage` from `u-boot-tools`;
 - `7z`, unless using `--firmware-dir` or `--no-firmware`.
+- `qemu-arm-static` / `qemu-user-static` when installing WiFi runtime tools or
+  extra packages into the armhf rootfs.
 
 Example using already extracted firmware:
 

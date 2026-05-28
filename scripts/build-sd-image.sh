@@ -11,7 +11,8 @@ DTS_SRC="dts/sun9i-a80-cubieboard4.dts"
 DTS_ASSET="dts/sun9i-a80-cubieboard4.dts"
 DTS_SHA256="81767357cadd17b0980d4f6787508216740831b89e76588421be56f40d402a0f"
 DTB="dtb/sun9i-a80-cubieboard4.dtb"
-EXTRA_PKGS="parted wpasupplicant iw"
+WIFI_PKGS="iw wpasupplicant isc-dhcp-client"
+EXTRA_PKGS="parted"
 FIRMWARE_DIR=""
 WITH_FIRMWARE=1
 DOWNLOAD=1
@@ -91,6 +92,10 @@ Requirements:
   Linux root shell with curl or wget, sha256sum, gzip, dtc (device-tree-compiler),
   blkid, losetup, mount, umount, and mkimage from u-boot-tools. 7z is also required
   unless --firmware-dir or --no-firmware is used.
+
+  If WiFi firmware or --with-extras is enabled, qemu-arm-static is needed to
+  install packages inside the armhf rootfs. The script can install qemu-user-static
+  for you in interactive mode.
 EOF
 }
 
@@ -400,6 +405,9 @@ wizard_summary() {
 	printf "  AP6330 firmware:   %b\n" "$(bool_word "$WITH_FIRMWARE")"
 	printf "  install-to-emmc:   %b\n" "$(bool_word "$WITH_INSTALLER")"
 	printf "  wifi-wizard:       %b\n" "$(bool_word "$WITH_WIFI_WIZARD")"
+	if [ "$WITH_FIRMWARE" -eq 1 ] || [ "$WITH_WIFI_WIZARD" -eq 1 ]; then
+		printf "  WiFi packages:     %s\n" "$WIFI_PKGS"
+	fi
 	printf "  Extra packages:    %b\n" "$(bool_word "$WITH_EXTRAS")"
 	printf "  Write to SD:       %b\n" "$(bool_word "$WRITE_SD")"
 	if [ "$WRITE_SD" -eq 1 ]; then
@@ -446,7 +454,7 @@ wizard() {
 	fi
 
 	printf "\n  ${BOLD}Choose an image profile:${NC}\n"
-	printf "  1) Recommended  DTB + fixed U-Boot + WiFi firmware + helper scripts\n"
+	printf "  1) Recommended  DTB + fixed U-Boot + WiFi firmware/tools + helper scripts\n"
 	printf "  2) Field kit    Recommended + apt packages: %s\n" "$EXTRA_PKGS"
 	printf "  3) Minimal      Bootable image only, no WiFi firmware or helper scripts\n"
 	printf "  4) Custom       Choose each optional step\n"
@@ -690,17 +698,25 @@ else
 	log "Skipping AP6330 WiFi firmware"
 fi
 
-# ── Extra packages ─────────────────────────────────────────────
-if [ "$WITH_EXTRAS" -eq 0 ]; then
-	log "Skipping extra packages"
+# ── Rootfs packages ────────────────────────────────────────────
+ROOTFS_PKGS=""
+if [ "$WITH_FIRMWARE" -eq 1 ] || [ "$WITH_WIFI_WIZARD" -eq 1 ]; then
+	ROOTFS_PKGS="$ROOTFS_PKGS $WIFI_PKGS"
+fi
+if [ "$WITH_EXTRAS" -eq 1 ]; then
+	ROOTFS_PKGS="$ROOTFS_PKGS $EXTRA_PKGS"
+fi
+
+if [ -z "${ROOTFS_PKGS## }" ]; then
+	log "Skipping rootfs package installation"
 	HAVE_QEMU=0
 else
 	log ""
-	log "--- Installing extra packages ---"
+	log "--- Installing rootfs packages ---"
 	if command -v qemu-arm-static >/dev/null 2>&1; then
 		HAVE_QEMU=1
 	else
-		log "qemu-arm-static not found (needed to install extra packages in the armhf rootfs)"
+		log "qemu-arm-static not found (needed to install packages in the armhf rootfs)"
 		if [ "$WIZARD" -eq 1 ] && [ -r /dev/tty ]; then
 			read -r -p "Install qemu-user-static? [Y/n] " reply_qemu </dev/tty
 			case "$reply_qemu" in
@@ -718,7 +734,7 @@ else
 fi
 
 if [ "$HAVE_QEMU" -eq 1 ]; then
-	log "Installing extra packages: $EXTRA_PKGS"
+	log "Installing packages: $ROOTFS_PKGS"
 	install -m 0755 "$(command -v qemu-arm-static)" "$ROOT_MOUNT/usr/bin/"
 	[ -L "$ROOT_MOUNT/etc/resolv.conf" ] && RESOLV_ISLINK=1 || RESOLV_ISLINK=0
 	rm -f "$ROOT_MOUNT/etc/resolv.conf"
@@ -728,15 +744,15 @@ if [ "$HAVE_QEMU" -eq 1 ]; then
 	mount --bind /sys "$ROOT_MOUNT/sys"
 	mount --bind /dev/pts "$ROOT_MOUNT/dev/pts" 2>/dev/null || true
 	chroot "$ROOT_MOUNT" apt update
-	chroot "$ROOT_MOUNT" apt install -y $EXTRA_PKGS
+	chroot "$ROOT_MOUNT" apt install -y $ROOTFS_PKGS
 	umount "$ROOT_MOUNT/dev/pts" 2>/dev/null || true
 	umount "$ROOT_MOUNT/sys"
 	umount "$ROOT_MOUNT/dev"
 	umount "$ROOT_MOUNT/proc"
 	rm -f "$ROOT_MOUNT/usr/bin/qemu-arm-static" "$ROOT_MOUNT/etc/resolv.conf"
-	log "Extra packages installed"
+	log "Rootfs packages installed"
 else
-	log "Skipping extra packages. Install manually on the CB4: apt install $EXTRA_PKGS"
+	log "Skipping package installation. Install manually on the CB4: apt install$ROOTFS_PKGS"
 fi
 
 sync
