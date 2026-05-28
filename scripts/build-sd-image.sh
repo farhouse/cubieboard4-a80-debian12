@@ -15,6 +15,10 @@ EXTRA_PKGS="parted wpasupplicant iw"
 FIRMWARE_DIR=""
 WITH_FIRMWARE=1
 DOWNLOAD=1
+WIZARD=0
+WITH_INSTALLER=1
+WITH_EXTRAS=1
+WRITE_SD=0
 
 BOOT_ASSET="boot-cubieboard4.bin.gz"
 ROOTFS_ASSET="debian-bookworm-armhf-vim3ve.bin.gz"
@@ -32,10 +36,21 @@ VENDOR_MOUNT=""
 IMAGE_LOOP=""
 VENDOR_LOOP=""
 
+# ── Colors (only for wizard) ──────────────────────────────────
+GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
+
+# ── Helpers ────────────────────────────────────────────────────
+log()   { printf '%s\n' "$*"; }
+die()   { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
+step()  { printf "\n${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n${BOLD}%s${NC}\n" "$*"; }
+warn()  { printf "  ${YELLOW}⚠ %s${NC}\n" "$*"; }
+ok()    { printf "  ${GREEN}✔ %s${NC}\n" "$*"; }
+sep()   { printf "  ${CYAN}────────────────────────────────────────────${NC}\n"; }
+
 usage() {
 	cat <<EOF
 Usage:
-  sudo $SELF [--output FILE] [--work-dir DIR]
+  sudo $SELF [--output FILE] [--work-dir DIR] [--interactive]
 
 Builds a Cubieboard4 Debian 12 SD image from preserved release assets, then
 patches the root filesystem with the validated DTB and AP6330 WiFi firmware.
@@ -54,11 +69,12 @@ Options:
                        Default: WORK_DIR/cubieboard4-a80-debian12-sd.img
   --work-dir DIR       Cache and temporary files, default: $WORK_DIR.
   --release-base URL   Override the GitHub Release download base URL.
-  --dtb FILE           DTB to install (overrides compilation from $DTS_SRC), default: $DTB.
+  --dtb FILE           DTB to install (overrides compilation from $DTS_SRC).
   --firmware-dir DIR   Use AP6330 firmware from DIR instead of vendor image.
                        Expected files: fw_bcm40183b2_ag.bin, nvram_ap6330.txt
   --no-firmware        Do not install AP6330 WiFi firmware.
   --skip-download      Reuse already cached assets only.
+  -i, --interactive    Interactive wizard mode (step by step choices).
   -h, --help           Show this help.
 
 Requirements:
@@ -66,15 +82,6 @@ Requirements:
   blkid, losetup, mount, umount, and mkimage from u-boot-tools. 7z is also required
   unless --firmware-dir or --no-firmware is used.
 EOF
-}
-
-log() {
-	printf '%s\n' "$*"
-}
-
-die() {
-	printf 'ERROR: %s\n' "$*" >&2
-	exit 1
 }
 
 require_cmd() {
@@ -119,6 +126,7 @@ download_asset() {
 	[ "$DOWNLOAD" -eq 1 ] || die "missing cached asset and --skip-download was used: $dest"
 
 	log "Downloading: $url"
+	mkdir -p "$(dirname "$dest")"
 	if command -v curl >/dev/null 2>&1; then
 		curl -L --connect-timeout 15 --max-time 120 --fail --output "$dest.tmp" "$url" || {
 			log "curl failed with exit code $?"
@@ -138,7 +146,6 @@ download_asset() {
 verify_sha256() {
 	local file="$1"
 	local expected="$2"
-
 	log "Verifying SHA256: $file"
 	printf '%s  %s\n' "$expected" "$file" | sha256sum -c -
 }
@@ -146,7 +153,6 @@ verify_sha256() {
 attach_loop() {
 	local image="$1"
 	local loopdev
-
 	loopdev="$(losetup --find --partscan --show "$image")"
 	if command -v udevadm >/dev/null 2>&1; then
 		udevadm settle
@@ -157,7 +163,6 @@ attach_loop() {
 partition_path() {
 	local loopdev="$1"
 	local partno="$2"
-
 	if [ -b "${loopdev}p${partno}" ]; then
 		printf '%s\n' "${loopdev}p${partno}"
 	elif [ -b "${loopdev}${partno}" ]; then
@@ -169,29 +174,24 @@ partition_path() {
 
 copy_ap6330_firmware() {
 	local src_dir="$1"
-	local target_dir="$2/lib/firmware/brcm"
+	local target="$2/lib/firmware/brcm"
 	local fw_bin="$src_dir/fw_bcm40183b2_ag.bin"
 	local fw_txt="$src_dir/nvram_ap6330.txt"
-
 	[ -f "$fw_bin" ] || die "missing AP6330 firmware: $fw_bin"
 	[ -f "$fw_txt" ] || die "missing AP6330 NVRAM: $fw_txt"
-
 	log "Installing AP6330 WiFi firmware"
-	install -d "$target_dir"
-	install -m 0644 "$fw_bin" "$target_dir/brcmfmac4330-sdio.bin"
-	install -m 0644 "$fw_txt" "$target_dir/brcmfmac4330-sdio.txt"
+	install -d "$target"
+	install -m 0644 "$fw_bin" "$target/brcmfmac4330-sdio.bin"
+	install -m 0644 "$fw_txt" "$target/brcmfmac4330-sdio.txt"
 }
 
 detect_kernel_version() {
 	local boot_dir="$1/boot"
-	local kernel=""
-	local path
-
+	local kernel="" path
 	for path in "$boot_dir"/vmlinuz-*; do
 		[ -f "$path" ] || continue
 		kernel="$(basename "$path")"
 	done
-
 	[ -n "$kernel" ] || die "could not find kernel image in: $boot_dir"
 	printf '%s\n' "${kernel#vmlinuz-}"
 }
@@ -199,14 +199,10 @@ detect_kernel_version() {
 write_sd_boot_script() {
 	local root_part="$1"
 	local root_mount="$2"
-	local root_uuid
-	local kernel_version
-	local boot_cmd="$root_mount/boot/boot.cmd"
-
+	local root_uuid kernel_version boot_cmd="$root_mount/boot/boot.cmd"
 	root_uuid="$(blkid -s UUID -o value "$root_part")"
 	[ -n "$root_uuid" ] || die "could not determine rootfs UUID for: $root_part"
 	kernel_version="$(detect_kernel_version "$root_mount")"
-
 	log "Writing SD boot script with root=UUID=$root_uuid"
 	cat >"$boot_cmd" <<EOF
 setenv devtype mmc
@@ -221,12 +217,7 @@ EOF
 }
 
 validate_output_path() {
-	case "$OUTPUT" in
-		/dev/*)
-			die "--output must be an image file path, not a block device: $OUTPUT"
-			;;
-	esac
-
+	case "$OUTPUT" in /dev/*) die "--output must be an image file path, not a block device: $OUTPUT" ;; esac
 	[ ! -b "$OUTPUT" ] || die "--output points to a block device: $OUTPUT"
 	[ ! -d "$OUTPUT" ] || die "--output points to a directory: $OUTPUT"
 	[ ! -L "$OUTPUT" ] || die "--output must not be a symlink: $OUTPUT"
@@ -240,72 +231,154 @@ extract_vendor_firmware() {
 	local extract_dir="$WORK_DIR/vendor-sd"
 	local vendor_img="$extract_dir/cb4-debian-server-hdmi-card-v1.0.img"
 	local vendor_root
-
 	require_cmd 7z
-
 	download_asset "$VENDOR_SD_ASSET"
 	verify_sha256 "$archive" "$VENDOR_SD_SHA256"
-
 	if [ ! -f "$vendor_img" ]; then
 		log "Extracting vendor SD image"
 		mkdir -p "$extract_dir"
 		7z x -y "-o$extract_dir" "$archive"
 	fi
-
 	[ -f "$vendor_img" ] || die "vendor image not found after extraction: $vendor_img"
-
 	VENDOR_MOUNT="$WORK_DIR/mnt-vendor"
 	mkdir -p "$VENDOR_MOUNT"
 	VENDOR_LOOP="$(attach_loop "$vendor_img")"
 	vendor_root="$(partition_path "$VENDOR_LOOP" 2)"
 	log "Mounting vendor rootfs: $vendor_root"
 	mount -o ro "$vendor_root" "$VENDOR_MOUNT"
-
 	copy_ap6330_firmware "$VENDOR_MOUNT/lib/firmware/ap6330" "$ROOT_MOUNT"
 }
 
+download_dts_if_missing() {
+	if [ -f "$DTS_SRC" ]; then return 0; fi
+	if [ -f "$CACHE_DIR/$DTS_ASSET" ]; then
+		DTS_SRC="$CACHE_DIR/$DTS_ASSET"
+		return 0
+	fi
+	dts_url="$RAW_BASE/$DTS_ASSET"
+	dts_dest="$CACHE_DIR/$DTS_ASSET"
+	dts_tmp="${dts_dest}.tmp-$$"
+	mkdir -p "$(dirname "$dts_dest")"
+	log "Downloading DTS: $dts_url"
+	if command -v curl >/dev/null 2>&1; then
+		curl -L --connect-timeout 15 --max-time 60 --fail --output "$dts_tmp" "$dts_url" || {
+			rc_curl=$?; log "curl exit code: $rc_curl"
+			die "curl failed (exit $rc_curl) — check network / URL: $dts_url"
+		}
+	elif command -v wget >/dev/null 2>&1; then
+		wget --timeout=15 -O "$dts_tmp" "$dts_url" || {
+			rc_wget=$?; die "wget failed (exit $rc_wget) — check network / URL: $dts_url"
+		}
+	else
+		die "required command not found: curl or wget"
+	fi
+	mv "$dts_tmp" "$dts_dest"
+	DTS_SRC="$dts_dest"
+}
+
+# ── Wizard ─────────────────────────────────────────────────────
+wizard() {
+	printf "\n${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+	printf "\n${BOLD}  Cubieboard4 A80 — SD Image Builder Wizard${NC}"
+	printf "\n${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+
+	DOWNLOAD=1; WITH_FIRMWARE=1; WITH_INSTALLER=1; WITH_EXTRAS=1; WRITE_SD=0
+
+	# Show work dir
+	[ -n "$OUTPUT" ] && img="$OUTPUT" || img="$WORK_DIR/cubieboard4-a80-debian12-sd.img"
+	printf "\n  ${BOLD}Work dir:${NC}  $WORK_DIR"
+	printf "\n  ${BOLD}Image:${NC}     $img\n"
+
+	# Asset status
+	printf "\n  ${BOLD}Cached assets:${NC}\n"
+	asset_ok()   { printf "  ${GREEN}✔${NC} %s\n" "$1"; }
+	asset_miss() { printf "  ${YELLOW}⚠${NC} %s\n" "$1"; }
+	for pair in \
+		"$BOOT_ASSET:boot image" \
+		"$ROOTFS_ASSET:Debian rootfs" \
+		"$UBOOT_FIX_ASSET:fixed U-Boot" \
+		"$VENDOR_SD_ASSET:vendor SD (firmware source)"; do
+		f="${pair%%:*}"
+		l="${pair#*:}"
+		[ -f "$CACHE_DIR/$f" ] && asset_ok "$l" || asset_miss "$l"
+	done
+	if [ -f "$DTS_SRC" ] || [ -f "$CACHE_DIR/$DTS_ASSET" ]; then
+		asset_ok "DTS source"
+	else
+		asset_miss "DTS source"
+	fi
+
+	# Build checklist
+	printf "\n  ${BOLD}Build checklist:${NC}\n"
+	prompt_yn() {
+		local label="$1" var_name="$2" default="$3"
+		local current; eval "current=\${$var_name}"
+		[ "$current" -eq 1 ] && c="${GREEN}Y${NC}" || c="${RED}n${NC}"
+		printf "  [${c}]  %s\n" "$label"
+	}
+	prompt_yn "Download missing assets"                    DOWNLOAD       1
+	prompt_yn "Compile DTB from DTS source"                SKIP_DTB_PHASE 1
+	prompt_yn "Install WiFi firmware (AP6330)"             WITH_FIRMWARE  1
+	prompt_yn "Install helper scripts (install-to-emmc, wifi-wizard)" WITH_INSTALLER 1
+	prompt_yn "Install extra packages (wpasupplicant, iw, parted)"  WITH_EXTRAS 1
+	prompt_yn "Write image to SD after build"              WRITE_SD       0
+
+	printf "\n  ${BOLD}Toggle steps by number, or press Enter to continue:${NC}\n"
+	printf "  1) Download missing assets\n"
+	printf "  2) Compile DTB from DTS\n"
+	printf "  3) Install WiFi firmware (AP6330)\n"
+	printf "  4) Install helper scripts\n"
+	printf "  5) Install extra packages\n"
+	printf "  6) Write image to SD after build\n"
+	printf "  a) All    n) None    d) Defaults\n"
+	printf "  ${BOLD}> ${NC}"
+	read -r wizard_reply </dev/tty
+
+	[ -z "$wizard_reply" ] && return 0
+
+	case "$wizard_reply" in
+		a|A) DOWNLOAD=1; WITH_FIRMWARE=1; WITH_INSTALLER=1; WITH_EXTRAS=1; WRITE_SD=1 ;;
+		n|N) DOWNLOAD=0; WITH_FIRMWARE=0; WITH_INSTALLER=0; WITH_EXTRAS=0; WRITE_SD=0 ;;
+		d|D) DOWNLOAD=1; WITH_FIRMWARE=1; WITH_INSTALLER=1; WITH_EXTRAS=1; WRITE_SD=0 ;;
+		*)
+			for num in $wizard_reply; do
+				case "$num" in
+					1) [ "$DOWNLOAD" -eq 1 ] && DOWNLOAD=0 || DOWNLOAD=1 ;;
+					2) SKIP_DTB_PHASE=$((1 - SKIP_DTB_PHASE)) ;;
+					3) [ "$WITH_FIRMWARE" -eq 1 ] && WITH_FIRMWARE=0 || WITH_FIRMWARE=1 ;;
+					4) [ "$WITH_INSTALLER" -eq 1 ] && WITH_INSTALLER=0 || WITH_INSTALLER=1 ;;
+					5) [ "$WITH_EXTRAS" -eq 1 ] && WITH_EXTRAS=0 || WITH_EXTRAS=1 ;;
+					6) [ "$WRITE_SD" -eq 1 ] && WRITE_SD=0 || WRITE_SD=1 ;;
+				esac
+			done
+			# Show final state
+			printf "\n  Final selection:\n"
+			printf "  %s Download\n"       "$([ "$DOWNLOAD" -eq 1 ] && echo "${GREEN}✔${NC}" || echo "${RED}✖${NC}")"
+			printf "  %s Compile DTB\n"    "$([ "$SKIP_DTB_PHASE" -eq 1 ] && echo "${GREEN}✔${NC}" || echo "${RED}✖${NC}")"
+			printf "  %s WiFi firmware\n"  "$([ "$WITH_FIRMWARE" -eq 1 ] && echo "${GREEN}✔${NC}" || echo "${RED}✖${NC}")"
+			printf "  %s Helper scripts\n" "$([ "$WITH_INSTALLER" -eq 1 ] && echo "${GREEN}✔${NC}" || echo "${RED}✖${NC}")"
+			printf "  %s Extra packages\n" "$([ "$WITH_EXTRAS" -eq 1 ] && echo "${GREEN}✔${NC}" || echo "${RED}✖${NC}")"
+			printf "  %s Write to SD\n"    "$([ "$WRITE_SD" -eq 1 ] && echo "${GREEN}✔${NC}" || echo "${RED}✖${NC}")"
+			printf "  ${BOLD}Proceed? [Y/n] ${NC}"
+			read -r confirm </dev/tty
+			case "$confirm" in [nN]*) die "aborted" ;; esac
+			;;
+	esac
+}
+
+# ── Argument parsing ───────────────────────────────────────────
 while [ "$#" -gt 0 ]; do
 	case "$1" in
-		--output)
-			[ "$#" -ge 2 ] || die "--output requires a value"
-			OUTPUT="$2"
-			shift 2
-			;;
-		--work-dir)
-			[ "$#" -ge 2 ] || die "--work-dir requires a value"
-			WORK_DIR="$2"
-			shift 2
-			;;
-		--release-base)
-			[ "$#" -ge 2 ] || die "--release-base requires a value"
-			RELEASE_BASE="${2%/}"
-			shift 2
-			;;
-		--dtb)
-			[ "$#" -ge 2 ] || die "--dtb requires a value"
-			DTB="$2"
-			shift 2
-			;;
-		--firmware-dir)
-			[ "$#" -ge 2 ] || die "--firmware-dir requires a value"
-			FIRMWARE_DIR="$2"
-			shift 2
-			;;
-		--no-firmware)
-			WITH_FIRMWARE=0
-			shift
-			;;
-		--skip-download)
-			DOWNLOAD=0
-			shift
-			;;
-		-h|--help)
-			usage
-			exit 0
-			;;
-		*)
-			die "unknown argument: $1"
-			;;
+		--output)     [ "$#" -ge 2 ] || die "--output requires a value"; OUTPUT="$2"; shift 2 ;;
+		--work-dir)   [ "$#" -ge 2 ] || die "--work-dir requires a value"; WORK_DIR="$2"; shift 2 ;;
+		--release-base) [ "$#" -ge 2 ] || die "--release-base requires a value"; RELEASE_BASE="${2%/}"; shift 2 ;;
+		--dtb)        [ "$#" -ge 2 ] || die "--dtb requires a value"; DTB="$2"; shift 2 ;;
+		--firmware-dir) [ "$#" -ge 2 ] || die "--firmware-dir requires a value"; FIRMWARE_DIR="$2"; shift 2 ;;
+		--no-firmware) WITH_FIRMWARE=0; shift ;;
+		--skip-download) DOWNLOAD=0; shift ;;
+		-i|--interactive) WIZARD=1; shift ;;
+		-h|--help) usage; exit 0 ;;
+		*) die "unknown argument: $1" ;;
 	esac
 done
 
@@ -326,8 +399,24 @@ require_cmd sha256sum     coreutils
 require_cmd sync          coreutils
 require_cmd umount        mount
 
+CACHE_DIR="$WORK_DIR/cache"
+mkdir -p "$CACHE_DIR"
+
+# Auto-detect TTY: if no --output and no --no-* flags and TTY available, go wizard
+if [ "$WIZARD" -eq 0 ] && [ -t 0 ] && [ -z "$OUTPUT" ] && [ "$WITH_FIRMWARE" -eq 1 ] && [ "$DOWNLOAD" -eq 1 ]; then
+	WIZARD=1
+fi
+
+if [ "$WIZARD" -eq 1 ]; then
+	wizard
+	# If wizard disabled firmware, skip 7z requirement
+	if [ "$WITH_FIRMWARE" -eq 0 ]; then
+		FIRMWARE_DIR=""
+	fi
+fi
+
 if [ "$WITH_FIRMWARE" -eq 1 ] && [ -z "$FIRMWARE_DIR" ]; then
-	require_cmd 7z  p7zip-full
+	require_cmd 7z p7zip-full
 fi
 
 if [ -n "$missing_pkgs" ]; then
@@ -340,26 +429,18 @@ if [ -n "$missing_pkgs" ]; then
 	apt update && apt install -y $missing_pkgs
 fi
 
-CACHE_DIR="$WORK_DIR/cache"
-mkdir -p "$CACHE_DIR"
-
+# ── Asset status display ───────────────────────────────────────
+log ""
 log "=== Cubieboard4 A80 Debian 12 SD Image Builder ==="
 log ""
 
-log ""
 log "Assets status:"
 missing=0
 check_asset() {
-	local label="$1"
-	local path="$2"
-	if [ -f "$path" ]; then
-		log "  [OK]   $label"
-	else
-		log "  [MISS] $label"
-		missing=1
-	fi
+	local label="$1" path="$2"
+	if [ -f "$path" ]; then log "  [OK]   $label"
+	else log "  [MISS] $label"; missing=1; fi
 }
-
 check_asset "Boot image"            "$CACHE_DIR/$BOOT_ASSET"
 check_asset "Debian rootfs"         "$CACHE_DIR/$ROOTFS_ASSET"
 check_asset "Fixed U-Boot"          "$CACHE_DIR/$UBOOT_FIX_ASSET"
@@ -375,50 +456,26 @@ else
 fi
 log ""
 
-# Ensure DTS is available — download from raw GitHub if missing
-if [ ! -f "$DTS_SRC" ]; then
-	if [ -f "$CACHE_DIR/$DTS_ASSET" ]; then
-		log "Using cached DTS: $CACHE_DIR/$DTS_ASSET"
-		DTS_SRC="$CACHE_DIR/$DTS_ASSET"
-	else
-		dts_url="$RAW_BASE/$DTS_ASSET"
-		dts_dest="$CACHE_DIR/$DTS_ASSET"
-		dts_tmp="${dts_dest}.tmp-$$"
-		mkdir -p "$(dirname "$dts_dest")"
-		log "Downloading DTS: $dts_url"
-		if command -v curl >/dev/null 2>&1; then
-			curl -L --connect-timeout 15 --max-time 60 --fail --output "$dts_tmp" "$dts_url" || {
-				rc_curl=$?
-				log "curl exit code: $rc_curl"
-				die "curl failed (exit $rc_curl) — check network / URL: $dts_url"
-			}
-		elif command -v wget >/dev/null 2>&1; then
-			wget --timeout=15 -O "$dts_tmp" "$dts_url" || {
-				rc_wget=$?
-				die "wget failed (exit $rc_wget) — check network / URL: $dts_url"
-			}
-		else
-			die "required command not found: curl or wget"
-		fi
-		mv "$dts_tmp" "$dts_dest"
-		DTS_SRC="$dts_dest"
-	fi
-fi
+# ── DTS → DTB ──────────────────────────────────────────────────
+log "--- DTS / DTB ---"
+download_dts_if_missing
 verify_sha256 "$DTS_SRC" "$DTS_SHA256"
 
 if [ ! -f "$DTB" ] || [ "$DTB" -ot "$DTS_SRC" ]; then
 	log "Compiling DTB: $DTS_SRC -> $DTB"
 	mkdir -p "$(dirname "$DTB")"
 	dtc -I dts -O dtb -o "$DTB" "$DTS_SRC"
+else
+	log "DTB is up to date: $DTB"
 fi
 
+# ── Download prompt for release assets ─────────────────────────
 if [ "$DOWNLOAD" -eq 1 ] && [ "$missing" -eq 1 ]; then
 	read -r -p "Download missing assets? [Y/n] " reply </dev/tty
-	case "$reply" in
-		[nN]*) die "aborted by user" ;;
-	esac
+	case "$reply" in [nN]*) die "aborted by user" ;; esac
 fi
 
+# ── Build image ────────────────────────────────────────────────
 if [ -z "$OUTPUT" ]; then
 	OUTPUT="$WORK_DIR/cubieboard4-a80-debian12-sd.img"
 fi
@@ -457,24 +514,42 @@ download_asset "$UBOOT_FIX_ASSET"
 verify_sha256 "$CACHE_DIR/$UBOOT_FIX_ASSET" "$UBOOT_FIX_SHA256"
 install -D -m 0644 "$CACHE_DIR/$UBOOT_FIX_ASSET" "$ROOT_MOUNT/boot/u-boot-sunxi-with-spl.bin"
 
-read -r -p "Include install-to-emmc.sh on the image? [Y/n] " reply_installer </dev/tty
-case "$reply_installer" in
-	[nN]*) log "Skipping install-to-emmc.sh" ;;
-	*)
-		log "Installing install-to-emmc.sh to /root/"
-		if [ -f "$(dirname "$0")/install-to-emmc.sh" ]; then
-			install -D -m 0755 "$(dirname "$0")/install-to-emmc.sh" "$ROOT_MOUNT/root/install-to-emmc.sh"
-		else
-			log "Downloading install-to-emmc.sh from upstream"
-			curl -sL --fail "$RAW_BASE/scripts/install-to-emmc.sh" \
-				-o "$ROOT_MOUNT/root/install-to-emmc.sh"
-			chmod 0755 "$ROOT_MOUNT/root/install-to-emmc.sh"
-		fi
-		;;
-esac
+# ── Install helper scripts ────────────────────────────────────
+if [ "$WIZARD" -eq 1 ]; then
+	if [ "$WITH_INSTALLER" -eq 1 ]; then
+		log "Installing helper scripts to /root/"
+		for script in install-to-emmc.sh wifi-wizard.sh; do
+			if [ -f "$(dirname "$0")/$script" ]; then
+				install -D -m 0755 "$(dirname "$0")/$script" "$ROOT_MOUNT/root/$script"
+			else
+				log "Downloading $script from upstream"
+				curl -sL --fail "$RAW_BASE/scripts/$script" -o "$ROOT_MOUNT/root/$script"
+				chmod 0755 "$ROOT_MOUNT/root/$script"
+			fi
+		done
+	fi
+else
+	# Legacy prompt
+	read -r -p "Include install-to-emmc.sh on the image? [Y/n] " reply_installer </dev/tty
+	case "$reply_installer" in
+		[nN]*) log "Skipping install-to-emmc.sh" ;;
+		*)
+			log "Installing install-to-emmc.sh to /root/"
+			if [ -f "$(dirname "$0")/install-to-emmc.sh" ]; then
+				install -D -m 0755 "$(dirname "$0")/install-to-emmc.sh" "$ROOT_MOUNT/root/install-to-emmc.sh"
+			else
+				log "Downloading install-to-emmc.sh from upstream"
+				curl -sL --fail "$RAW_BASE/scripts/install-to-emmc.sh" \
+					-o "$ROOT_MOUNT/root/install-to-emmc.sh"
+				chmod 0755 "$ROOT_MOUNT/root/install-to-emmc.sh"
+			fi
+			;;
+	esac
+fi
 
 write_sd_boot_script "$root_part" "$ROOT_MOUNT"
 
+# ── WiFi firmware ──────────────────────────────────────────────
 if [ "$WITH_FIRMWARE" -eq 1 ]; then
 	if [ -n "$FIRMWARE_DIR" ]; then
 		copy_ap6330_firmware "$FIRMWARE_DIR" "$ROOT_MOUNT"
@@ -485,25 +560,27 @@ else
 	log "Skipping AP6330 WiFi firmware"
 fi
 
-log ""
-log "--- Installing extra packages ---"
-if command -v qemu-arm-static >/dev/null 2>&1; then
-	HAVE_QEMU=1
+# ── Extra packages ─────────────────────────────────────────────
+if [ "$WIZARD" -eq 1 ] && [ "$WITH_EXTRAS" -eq 0 ]; then
+	log "Skipping extra packages (disabled in wizard)"
+	HAVE_QEMU=0
 else
-	log "qemu-arm-static not found (needed to install extra packages in the armhf rootfs)"
-	read -r -p "Install qemu-user-static? [Y/n] " reply_qemu </dev/tty
-	case "$reply_qemu" in
-		[nN]*) HAVE_QEMU=0 ;;
-		*)
-			apt install -y qemu-user-static
-			if command -v qemu-arm-static >/dev/null 2>&1; then
-				HAVE_QEMU=1
-			else
-				log "qemu-user-static installation failed"
-				HAVE_QEMU=0
-			fi
-			;;
-	esac
+	log ""
+	log "--- Installing extra packages ---"
+	if command -v qemu-arm-static >/dev/null 2>&1; then
+		HAVE_QEMU=1
+	else
+		log "qemu-arm-static not found (needed to install extra packages in the armhf rootfs)"
+		read -r -p "Install qemu-user-static? [Y/n] " reply_qemu </dev/tty
+		case "$reply_qemu" in
+			[nN]*) HAVE_QEMU=0 ;;
+			*)
+				apt install -y qemu-user-static
+				if command -v qemu-arm-static >/dev/null 2>&1; then HAVE_QEMU=1
+				else log "qemu-user-static installation failed"; HAVE_QEMU=0; fi
+				;;
+		esac
+	fi
 fi
 
 if [ "$HAVE_QEMU" -eq 1 ]; then
@@ -534,35 +611,51 @@ ROOT_MOUNT=""
 losetup -d "$IMAGE_LOOP"
 IMAGE_LOOP=""
 
-if [ -n "$VENDOR_MOUNT" ] && mountpoint -q "$VENDOR_MOUNT"; then
-	umount "$VENDOR_MOUNT"
-fi
+if [ -n "$VENDOR_MOUNT" ] && mountpoint -q "$VENDOR_MOUNT"; then umount "$VENDOR_MOUNT"; fi
 VENDOR_MOUNT=""
-if [ -n "$VENDOR_LOOP" ]; then
-	losetup -d "$VENDOR_LOOP"
-	VENDOR_LOOP=""
-fi
-
-log "Done: $OUTPUT"
+if [ -n "$VENDOR_LOOP" ]; then losetup -d "$VENDOR_LOOP"; VENDOR_LOOP=""; fi
 
 log ""
-read -r -p "Write this image to an SD card? [y/N] " reply </dev/tty
-case "$reply" in
-	[yY]*)
-		log ""
-		log "Available disks (exclude the one with / mount):"
-		lsblk -dno NAME,SIZE,MODEL | grep -v '^loop'
-		log ""
-		log "Enter the device path (e.g. /dev/sdb):"
-		read -r sd_dev </dev/tty
-		[ -b "$sd_dev" ] || die "not a block device: $sd_dev"
-		log ""
-		log "WARNING: This will DESTROY ALL DATA on $sd_dev"
-		read -r -p "Are you sure? Type the device name to confirm ($(basename "$sd_dev")): " confirm </dev/tty
-		[ "$confirm" = "$(basename "$sd_dev")" ] || die "confirmation mismatch, aborting"
-		log "Writing $OUTPUT to $sd_dev ..."
-		dd if="$OUTPUT" of="$sd_dev" bs=4M conv=sync status=progress
-		sync
-		log "Done. You can now remove the SD card."
-		;;
-esac
+log "Done: $OUTPUT"
+
+# ── Write to SD ────────────────────────────────────────────────
+if [ "$WRITE_SD" -eq 1 ]; then
+	log ""
+	log "Available disks (exclude the one with / mount):"
+	lsblk -dno NAME,SIZE,MODEL | grep -v '^loop'
+	log ""
+	log "Enter the device path (e.g. /dev/sdb):"
+	read -r sd_dev </dev/tty
+	[ -b "$sd_dev" ] || die "not a block device: $sd_dev"
+	log ""
+	log "WARNING: This will DESTROY ALL DATA on $sd_dev"
+	read -r -p "Are you sure? Type the device name to confirm ($(basename "$sd_dev")): " confirm </dev/tty
+	[ "$confirm" = "$(basename "$sd_dev")" ] || die "confirmation mismatch, aborting"
+	log "Writing $OUTPUT to $sd_dev ..."
+	dd if="$OUTPUT" of="$sd_dev" bs=4M conv=sync status=progress
+	sync
+	log "Done. You can now remove the SD card."
+elif [ "$WIZARD" -eq 0 ]; then
+	# Legacy prompt for non-wizard mode
+	log ""
+	read -r -p "Write this image to an SD card? [y/N] " reply </dev/tty
+	case "$reply" in
+		[yY]*)
+			log ""
+			log "Available disks (exclude the one with / mount):"
+			lsblk -dno NAME,SIZE,MODEL | grep -v '^loop'
+			log ""
+			log "Enter the device path (e.g. /dev/sdb):"
+			read -r sd_dev </dev/tty
+			[ -b "$sd_dev" ] || die "not a block device: $sd_dev"
+			log ""
+			log "WARNING: This will DESTROY ALL DATA on $sd_dev"
+			read -r -p "Are you sure? Type the device name to confirm ($(basename "$sd_dev")): " confirm </dev/tty
+			[ "$confirm" = "$(basename "$sd_dev")" ] || die "confirmation mismatch, aborting"
+			log "Writing $OUTPUT to $sd_dev ..."
+			dd if="$OUTPUT" of="$sd_dev" bs=4M conv=sync status=progress
+			sync
+			log "Done. You can remove the SD card."
+			;;
+	esac
+fi
