@@ -55,6 +55,7 @@ check_prereqs() {
 	require_cmd blkid         util-linux
 	require_cmd dd            coreutils
 	require_cmd sha256sum     coreutils
+	require_cmd strings       binutils
 	require_cmd mkfs.ext4     e2fsprogs
 	require_cmd mkfs.vfat     dosfstools
 	require_cmd mount         mount
