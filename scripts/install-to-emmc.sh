@@ -93,11 +93,22 @@ detect_hardware() {
 	info "Source root:  $SOURCE_ROOT  ($(lsblk -dno SIZE "$SOURCE_ROOT" 2>/dev/null))"
 
 	if [ -b "$SOURCE_DISK" ]; then
-		REMOVABLE="$(cat "/sys/block/$(basename "$SOURCE_DISK")/removable" 2>/dev/null || true)"
-		if [ "$REMOVABLE" = "0" ]; then
+		# Check MMC device type first (more reliable than removable flag,
+		# since some SD slots report removable=0 on this board).
+		SRC_SYS="/sys/block/$(basename "$SOURCE_DISK")"
+		MMC_TYPE="$(cat "$SRC_SYS/device/type" 2>/dev/null || true)"
+		REMOVABLE="$(cat "$SRC_SYS/removable" 2>/dev/null || true)"
+		if [ "$MMC_TYPE" = "MMC" ]; then
 			SOURCE_TYPE="eMMC"
-		else
+		elif [ "$REMOVABLE" = "1" ]; then
 			SOURCE_TYPE="SD"
+		else
+			# Fallback: if there's another non-removable mmcblk, source is likely SD
+			if grep -l '0' /sys/block/mmcblk*/removable 2>/dev/null | grep -v "$(basename "$SOURCE_DISK")" | head -1 >/dev/null; then
+				SOURCE_TYPE="SD (probably)"
+			else
+				SOURCE_TYPE="unknown"
+			fi
 		fi
 		info "Source disk:  $SOURCE_DISK  (${SOURCE_TYPE})"
 	fi
