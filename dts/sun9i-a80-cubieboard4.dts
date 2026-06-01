@@ -9,6 +9,9 @@
 
 	aliases {
 		ethernet0 = "/soc@20000/ethernet@830000";
+		mmc0 = "/soc@20000/mmc@1c0f000";
+		mmc1 = "/soc@20000/mmc@1c10000";
+		mmc2 = "/soc@20000/mmc@1c11000";
 		serial0 = "/soc@20000/serial@7000000";
 	};
 

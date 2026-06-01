@@ -50,6 +50,17 @@ check_prereqs() {
 	ok "All required tools found"
 }
 
+mmc_host_for_node() {
+	local node="$1"
+	local host
+	for host in /sys/bus/platform/devices/"$node"/mmc_host/mmc*; do
+		[ -e "$host" ] || continue
+		basename "$host"
+		return 0
+	done
+	return 1
+}
+
 show_wifi_diagnostics() {
 	step "WiFi diagnostics"
 
@@ -79,6 +90,18 @@ show_wifi_diagnostics() {
 	else
 		printf "  none loaded\n"
 	fi
+
+	info ""
+	info "MMC host mapping (physical controller -> mmcX):"
+	for node in 1c0f000.mmc 1c10000.mmc 1c11000.mmc; do
+		local host
+		host="$(mmc_host_for_node "$node" 2>/dev/null || true)"
+		if [ -n "$host" ]; then
+			printf "  %-11s -> %s\n" "$node" "$host"
+		else
+			printf "  %-11s -> (not registered)\n" "$node"
+		fi
+	done
 
 	info ""
 	info "MMC/SDIO devices:"
@@ -136,7 +159,7 @@ detect_wifi() {
 
 	if ! find_wifi_interface; then
 		show_wifi_diagnostics
-		die "No WiFi interface found. Check DTB mmc1, AP6330 firmware, and brcmfmac kernel messages above."
+		die "No WiFi interface found. Check DTB/controller 1c10000.mmc (WiFi SDIO), AP6330 firmware, and brcmfmac/MMC kernel messages above."
 	fi
 
 	local RFKILL
