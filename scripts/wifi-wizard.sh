@@ -350,6 +350,14 @@ EOF
 
 	if [ -n "$ip" ]; then
 		ok "IP address: $ip"
+
+		# Explicitly set DNS via systemd-resolved (DHCP-provided DNS often
+		# points to router which may not resolve). Uses Cloudflare as fallback.
+		if command -v resolvectl >/dev/null 2>&1; then
+			resolvectl dns "$WIFI_DEV" 1.1.1.1 2>/dev/null || true
+			resolvectl domain "$WIFI_DEV" ~. 2>/dev/null || true
+			ok "DNS set via systemd-resolved"
+		fi
 	else
 		warn "No IP address obtained. Run 'dhclient $WIFI_DEV' or 'dhcpcd $WIFI_DEV' manually."
 		return 1
@@ -360,11 +368,13 @@ EOF
 	printf "  ${GREEN}✔${NC} IP: ${BOLD}%s${NC}\n" "$ip"
 	printf "  ${GREEN}✔${NC} Interface: ${BOLD}%s${NC}\n" "$WIFI_DEV"
 
-	# Test connectivity
-	if ping -c 1 -W 3 8.8.8.8 >/dev/null 2>&1; then
-		ok "Internet reachable"
+	# Test connectivity and DNS resolution
+	if getent hosts deb.debian.org >/dev/null 2>&1; then
+		ok "Internet reachable (DNS resolution OK)"
+	elif echo "GET /" > /dev/tcp/8.8.8.8/80 2>/dev/null; then
+		warn "Internet reachable (IP), but DNS may not work yet"
 	else
-		warn "Internet not reachable, but link is up (DNS may not work yet)"
+		warn "Internet not reachable, but link is up"
 	fi
 }
 
@@ -418,7 +428,7 @@ show_info() {
 	local ip gateway dns
 	ip=$(ip -4 addr show "$WIFI_DEV" 2>/dev/null | grep 'inet ' | awk '{print $2}')
 	gateway=$(ip route show default 2>/dev/null | awk '{print $3}')
-	dns=$(grep -m1 '^nameserver' /etc/resolv.conf 2>/dev/null | awk '{print $2}')
+	dns=$(resolvectl dns "$WIFI_DEV" 2>/dev/null | grep -oP 'DNS Servers: \K.*' || grep -m1 '^nameserver' /etc/resolv.conf 2>/dev/null | awk '{print $2}')
 
 	info "IP:         ${ip:-N/A}"
 	info "Gateway:    ${gateway:-N/A}"
