@@ -462,7 +462,6 @@ copy_rootfs() {
 			--exclude=/mnt/* \
 			--exclude=/media/* \
 			--exclude=/root/install-to-emmc.sh \
-			--exclude=/root/wifi-wizard.sh \
 			--exclude=/lost+found \
 			/ "$ROOT_MOUNT/"
 		echo ""
