@@ -20,6 +20,7 @@ log()   { printf "[%s] %s\n" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$*" >> "$LOGFIL
 sep()   { printf "  ${CYAN}────────────────────────────────────────────${NC}\n"; }
 
 prompt_yn() {
+	[ "${AUTO_YES:-0}" -eq 1 ] && return 0
 	local prompt="$1 [Y/n] " reply
 	read -r -p "$prompt" reply </dev/tty
 	case "$reply" in [nN]*) return 1;; *) return 0;; esac
@@ -745,11 +746,13 @@ select_steps() {
 	done
 	sep
 
-	if prompt_yn "Continue with these steps?"; then
-		return 0
-	else
-		select_steps
+	sep
+	echo ""
+	if ! prompt_yn "Run these steps now (no further prompts)?"; then
+		info "exiting"
+		exit 0
 	fi
+	AUTO_YES=1
 }
 
 # ── Run selected steps ─────────────────────────────────────────
@@ -876,6 +879,7 @@ main() {
 		print_summary
 		log "=== Session completed ==="
 
+		AUTO_YES=0
 		if prompt_yn "Run again with different options?"; then
 			continue
 		else
