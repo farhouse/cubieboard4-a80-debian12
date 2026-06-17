@@ -1,0 +1,20 @@
+#!/bin/sh
+# Kernel post-removal hook: regenerate boot.scr pointing to the latest remaining kernel.
+# Install to /etc/kernel/postrm.d/regenerate-bootscr.
+set -e
+
+[ -n "$1" ] || exit 0
+
+boot_cmd="/boot/boot.cmd"
+boot_scr="/boot/boot.scr"
+
+[ -f "$boot_cmd" ] || exit 0
+
+# Find the latest remaining kernel
+version="$(ls /boot/vmlinuz-* 2>/dev/null | sort -V | tail -1 | sed 's|/boot/vmlinuz-||')"
+[ -n "$version" ] || exit 0
+
+sed -i "s|/boot/vmlinuz-[^ ]*|/boot/vmlinuz-${version}|g" "$boot_cmd"
+sed -i "s|/boot/initrd.img-[^ ]*|/boot/initrd.img-${version}|g" "$boot_cmd"
+
+mkimage -C none -A arm -T script -d "$boot_cmd" "$boot_scr" >/dev/null 2>&1

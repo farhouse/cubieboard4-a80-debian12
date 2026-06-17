@@ -659,6 +659,13 @@ download_asset "$UBOOT_FIX_ASSET"
 verify_sha256 "$CACHE_DIR/$UBOOT_FIX_ASSET" "$UBOOT_FIX_SHA256"
 install -D -m 0644 "$CACHE_DIR/$UBOOT_FIX_ASSET" "$ROOT_MOUNT/boot/u-boot-sunxi-with-spl.bin"
 
+# ── Kernel post-install/removal hooks ─────────────────────────
+log "Installing kernel post-install/removal hooks"
+install -D -m 0755 "$(dirname "$0")/regenerate-bootscr-hook" \
+    "$ROOT_MOUNT/etc/kernel/postinst.d/regenerate-bootscr"
+install -D -m 0755 "$(dirname "$0")/regenerate-bootscr-rmhook" \
+    "$ROOT_MOUNT/etc/kernel/postrm.d/regenerate-bootscr"
+
 # ── Install helper scripts ────────────────────────────────────
 if [ "$WITH_INSTALLER" -eq 1 ]; then
 	log "Installing install-to-emmc.sh to /root/"

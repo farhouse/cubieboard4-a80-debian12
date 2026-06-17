@@ -1,0 +1,20 @@
+#!/bin/sh
+# Kernel post-install hook: regenerate boot.scr after kernel updates.
+# Install to /etc/kernel/postinst.d/regenerate-bootscr (and postrm.d).
+set -e
+
+version="$1"
+[ -n "$version" ] || exit 0
+
+boot_cmd="/boot/boot.cmd"
+boot_scr="/boot/boot.scr"
+dtb="/boot/sun9i-a80-cubieboard4.dtb"
+
+[ -f "$boot_cmd" ] || exit 0
+
+# Update kernel version in boot.cmd
+sed -i "s|/boot/vmlinuz-[^ ]*|/boot/vmlinuz-${version}|g" "$boot_cmd"
+sed -i "s|/boot/initrd.img-[^ ]*|/boot/initrd.img-${version}|g" "$boot_cmd"
+
+# Recompile boot.scr
+mkimage -C none -A arm -T script -d "$boot_cmd" "$boot_scr" >/dev/null 2>&1

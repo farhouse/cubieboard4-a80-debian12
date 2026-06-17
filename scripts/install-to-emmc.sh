@@ -564,6 +564,17 @@ BOOTCMD
 	mkimage -C none -A arm -T script -d "$BOOT_CMD_PATH" "$ROOT_MOUNT/boot/boot.scr" 2>&1
 	ok "boot.scr generated for UUID=$TARGET_ROOT_UUID kernel=$TARGET_KERNEL_VERSION"
 
+	# Install kernel post-install/removal hooks
+	HOOK_SRC="$(dirname "$(realpath "$0" 2>/dev/null || echo "$0")")/regenerate-bootscr-hook"
+	HOOK_RM_SRC="$(dirname "$(realpath "$0" 2>/dev/null || echo "$0")")/regenerate-bootscr-rmhook"
+	if [ -f "$HOOK_SRC" ] && [ -f "$HOOK_RM_SRC" ]; then
+		install -D -m 0755 "$HOOK_SRC" "$ROOT_MOUNT/etc/kernel/postinst.d/regenerate-bootscr"
+		install -D -m 0755 "$HOOK_RM_SRC" "$ROOT_MOUNT/etc/kernel/postrm.d/regenerate-bootscr"
+		ok "kernel post-install/removal hooks installed"
+	else
+		warn "hook scripts not found alongside install-to-emmc.sh (hooks not installed)"
+	fi
+
 	# Update fstab
 	info "Updating /etc/fstab..."
 	TARGET_BOOT_UUID="$(blkid -s UUID -o value "$TARGET_BOOT" 2>/dev/null || true)"
