@@ -2,15 +2,16 @@
 
 Bring-up and recovery repository for **Cubieboard4 / CC-A80 (Allwinner A80)**
 running Debian 12 armhf with a mainline kernel. The validated result is a
-microSD or eMMC image that boots to shell with Ethernet, USB Type-A, AP6330 WiFi,
-and eMMC boot working.
+microSD or eMMC image that boots to shell with USB Type-A, AP6330 WiFi with
+Internet access, and eMMC boot working. Ethernet currently reaches Gigabit link
+but has not passed traffic validation.
 
 Some investigation notes and raw logs are still in Spanish. The stable
 reproduction path is documented here in English.
 
 ## Validated Status
 
-Validated on real hardware on 2026-05-27:
+Validated on real hardware; documentation last consolidated on 2026-07-13:
 
 | Subsystem | Status | Notes |
 |---|---|---|
@@ -19,7 +20,7 @@ Validated on real hardware on 2026-05-27:
 | Debian 12 armhf | Working | Kernel `6.1.0-48-armmp` |
 | Ethernet | Link Up, no IPv4 | RTL8211E Gigabit Full Duplex link; 0 TX/RX packets — MAC random? |
 | USB Type-A | Working | Internal `05e3:0608` hub; flash drive tested on all 4 ports |
-| AP6330 WiFi | Working | `wlan0` scans networks; BCM4330/4, HT 300 Mbps |
+| AP6330 WiFi | Working | Association, DHCP, DNS and Internet validated; `wifi-wizard.sh` completed successfully |
 | Bluetooth | Pending | Firmware/UART setup still needed |
 | VGA/HDMI | Pending | Not validated yet |
 | PowerVR G6230 GPU | No mainline acceleration | Public firmware for BVNC `1.75.2.30` is missing |
@@ -27,6 +28,8 @@ Validated on real hardware on 2026-05-27:
 Detailed evidence is available in
 [docs/estado-validado.md](docs/estado-validado.md) and
 [notes/2026-05-26-emmc-boot-fix-clock-register.md](notes/2026-05-26-emmc-boot-fix-clock-register.md).
+Remaining implementation and validation work is tracked only in
+[docs/pendientes-implementacion.md](docs/pendientes-implementacion.md).
 
 ## Repository Contents
 
@@ -118,7 +121,8 @@ Run the builder directly (the script downloads and verifies its auxiliary
 scripts when it is not running from a clone):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/farhouse/cubieboard4-a80-debian12/main/scripts/build-sd-image.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/farhouse/cubieboard4-a80-debian12/main/scripts/build-sd-image.sh \
+  | sudo bash -s -- --interactive
 ```
 
 Or for more control:
@@ -159,6 +163,11 @@ compiles the validated DTB from `dts/sun9i-a80-cubieboard4.dts` (or uses
 the AP6330 firmware using the filenames expected by `brcmfmac` unless firmware
 is disabled. It also regenerates `/boot/boot.scr` so the kernel uses
 `root=UUID=...` instead of a fragile `/dev/mmcblkNp2` device name.
+
+The image also receives kernel `postinst` and `postrm` hooks that update the
+kernel/initrd paths in `boot.cmd` and rebuild `boot.scr`. The hooks are present
+in the builder, but their kernel-upgrade and kernel-removal paths still require
+end-to-end hardware validation.
 
 The fixed U-Boot is required for eMMC boot without SD. When running the
 install-to-emmc.sh script on the CB4, it will flash this binary from
@@ -318,8 +327,10 @@ cat /sys/kernel/debug/usb/devices
 WiFi:
 
 ```sh
-ifconfig wlan0 up
-iw dev wlan0 scan
+iw dev wlan0 link
+ip -4 addr show wlan0
+ip route
+getent hosts debian.org
 ```
 
 Ethernet:
@@ -340,7 +351,7 @@ Expected results:
   `root=PARTUUID=...` while both media are present unless identifiers are
   regenerated.
 - Genesys Logic USB hub `05e3:0608`.
-- `wlan0` present and able to scan networks.
+- `wlan0` associated, with a DHCP address, working DNS and Internet access.
 - Ethernet reports a Gigabit link if a cable is connected.
 
 ## Key Technical Changes
@@ -368,8 +379,9 @@ initialization of the BCM4330/4 chip.
 **Fix**: Changed `drive-strength = <0x14>` to `drive-strength = <0x1e>` in
 the DTS `mmc1_pins` node.
 
-**Result**: `wlan0` available with MAC `e0:76:d0:b0:d1:ea`, scans networks,
-HT 300 Mbps.
+**Result**: `wlan0` available with MAC `e0:76:d0:b0:d1:ea`, association,
+DHCP, DNS and Internet working, with HT up to 300 Mbps. The complete
+`wifi-wizard.sh` flow was also validated.
 
 See commit `c19557f` and the DTB at `dtb/sun9i-a80-cubieboard4.dtb`.
 
@@ -391,11 +403,11 @@ for the full analysis.
 
 ## Pending Work
 
-- Validate VGA/HDMI.
-- Configure AP6330 Bluetooth.
-- Investigate Ethernet: link up (1Gbps Full Duplex) but 0 IPv4 TX/RX packets.
-- Test `scripts/build-sd-image.sh` on a Linux host end-to-end.
-- Send U-Boot upstream patch: typo `CONFIG_MACH_SUN9I_A80` affects all sun9i-A80 boards.
+The prioritized backlog and closure criteria live in
+[docs/pendientes-implementacion.md](docs/pendientes-implementacion.md). In
+particular, the `a5e9a48` builder and kernel hooks have not yet been validated
+end-to-end on Linux and the board. The U-Boot fix was already sent upstream;
+only follow-up remains.
 
 ## eMMC Install Script
 

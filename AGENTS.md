@@ -59,24 +59,33 @@ Estabilizar el boot de Cubieboard4 A80 con Debian 12 desde microSD, lograr image
 - **WiFi AP6330: drive-strength fix**. Root cause: `mmc1_pins` drive-strength 20 (0x14) en vez de 30 (0x1e) causaba `fatal err update clk timeout`. Corregido a 30 (0x1e), DTB recompilado (commit `c19557f`), transferido a CB4 vía serial.
 - DTB validado en `dtb/sun9i-a80-cubieboard4.dtb` con: `broken-cd` en mmc0, mmc1→AP6330 SDIO 4-bit, mmc2→eMMC 8-bit HS200, `phy-supply` en usbphy1/usbphy3, reguladores VBUS, `wifi_pwrseq`.
 - Validación USB Type-A funcional en 4 puertos (hub `05e3:0608`).
-- Validación WiFi AP6330 funcional (`wlan0`, BCM4330/4, HT 300 Mbps).
+- Validación WiFi AP6330 end-to-end: asociación, DHCP, DNS, Internet y
+  ejecución completa de `scripts/wifi-wizard.sh`. La actualización de kernel
+  que expuso el `boot.scr` hardcodeado se realizó mediante esta conexión.
 - README traducido a inglés y reestructurado alrededor de reproducción de imagen.
 - Matriz de pruebas `docs/boot/matriz-pruebas-arranque.md` con 11 intentos documentados.
-- `CONFIG_MMC_BROKEN_CD=y` agregado a `configs/Cubieboard4_defconfig`, compilado nativo en CB4, flasheado a eMMC boot partition.
+- `CONFIG_MMC_BROKEN_CD=y` agregado a `configs/Cubieboard4_defconfig` en el
+  arbol externo de U-Boot usado para la compilacion (no versionado en este
+  repositorio), compilado nativo en CB4 y flasheado a la particion de boot eMMC.
 - **eMMC boot sin SD: RESUELTO**. Root cause: `get_mclk_offset()` en `drivers/mmc/sunxi_mmc.c:649` chequeaba `CONFIG_MACH_SUN9I_A80` (no existe) en vez de `CONFIG_MACH_SUN9I`. U-Boot proper escribía clock register de MMC2 en `0x06000090` en vez de `0x06000418`, lo que corrompía CMD2. Fix: cambio de `SUN9I_A80` a `SUN9I`.
 - Parche upstream enviado a `u-boot@lists.denx.de` con CC a Andre Przywara, Peng Fan, Jaehoon Chung.
 - DTB transferido a CB4 vía serial (base64 + tmux paste-buffer) ante falta de red.
 - `build-sd-image.sh`: refactor para compilar DTB desde `dts/` source en vez de descargar release asset. Eliminado `DTB_ASSET` y `DTB_SHA256`.
 - `build-sd-image.sh`: wizard `--interactive` reintroducido como perfiles de imagen (Recommended, Field kit, Minimal, Custom) para elegir firmware, helpers, paquetes extra y escritura a SD.
-- Documentación actualizada al 2026-05-27 (README, estado-validado, matriz, artefactos-externos, AGENTS).
+- Hooks `scripts/regenerate-bootscr-hook` y `scripts/regenerate-bootscr-rmhook`
+  agregados para regenerar `boot.scr` al instalar o eliminar kernels.
+- `build-sd-image.sh` corregido en `a5e9a48` para descargar y verificar los
+  scripts auxiliares cuando se ejecuta fuera de un clon, incluido el flujo
+  remoto con `curl | bash`.
+- Documentación consolidada; los faltantes activos se mantienen únicamente en
+  `docs/pendientes-implementacion.md`.
 
 ### Next Steps
-1. **Reproducir imagen SD con builder**: correr `scripts/build-sd-image.sh` en una máquina Linux o VM Linux, grabar a SD limpia y validar boot automático.
-2. **Ethernet sin tráfico IPv4**: investigar por qué hay link Gigabit Full Duplex pero 0 paquetes TX/RX. Posible MAC random filtrada.
-3. **Bluetooth AP6330**: instalar `bcm40183b2.hcd` y configurar UART/GPIOs BT.
-4. **HDMI/VGA**: probar salida de video.
-5. **GPU/display** (postergado): PowerVR G6230 sin firmware público para BVNC 1.75.2.30; HDMI no declarado en DTS mainline.
-6. **Validar con imágenes nuevas de Johan**: probar si `debian-bookworm-armhf-rieco4.bin.gz` (2026-05-25, kernel 6.1.172-1) funciona con el builder sin cambios.
+
+La lista priorizada, con alcance y criterios de cierre, se mantiene en
+`docs/pendientes-implementacion.md`. Los dos riesgos inmediatos son validar en
+Linux/hardware el builder publicado en `a5e9a48` y validar los hooks de
+`boot.scr` después de un kernel upgrade y posterior autoremove.
 
 ### Key Reference Files
 - `dtb/sun9i-a80-cubieboard4.dtb` — DTB final validado.
@@ -85,6 +94,7 @@ Estabilizar el boot de Cubieboard4 A80 con Debian 12 desde microSD, lograr image
 - `scripts/install-to-emmc.sh` — instalador eMMC.
 - `docs/boot/matriz-pruebas-arranque.md` — matriz cronológica de pruebas.
 - `docs/estado-validado.md` — estado consolidado de subsistemas.
+- `docs/pendientes-implementacion.md` — único backlog de implementación y validación pendiente.
 - `notes/2026-05-25-handoff-sd-root-uuid-emmc-blocker.md` — handoff con análisis de ambos issues.
 - `notes/2026-05-25-sd-initramfs-root-device-name.md` — detalle del fix root UUID.
 - `notes/2026-05-25-emmc-debian12-install-uboot-blocker.md` — detalle del blocker eMMC.

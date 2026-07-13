@@ -30,8 +30,14 @@ Registrar cada intento de boot con contexto suficiente para:
 | 2026-05-25 | Bookworm SD con eMMC presente tras instalacion | 6.1.0-37-armmp | 2025.04 johang | microSD + eMMC | `dtb/sun9i-a80-cubieboard4.dtb` | ⚠️ PARCIAL | ~35s hasta initramfs | `boot.scr` usaba `root=/dev/mmcblk0p2`, pero Linux enumero SD como `mmcblk1` y eMMC como `mmcblk2`. Solucion: usar `root=UUID=...`. | `notes/2026-05-25-sd-initramfs-root-device-name.md` |
 | 2026-05-25 | Bookworm SD con `boot.scr` corregido | 6.1.0-37-armmp | 2025.04 johang | microSD + eMMC | `dtb/sun9i-a80-cubieboard4.dtb` | ✅ OK | ~35s | Boot automatico hasta login usando `root=UUID=66c76c3a-4c75-4bb3-9665-dbb0dce7649e`; ya no depende de `mmcblkN`. | `notes/2026-05-25-sd-initramfs-root-device-name.md` |
 | 2026-05-26 | Bookworm eMMC | 6.1.0-48-armmp | 2025.07-rc4 | eMMC sin microSD | `dtb/sun9i-a80-cubieboard4.dtb` + U-Boot DTS fix | ✅ OK | ~35s | eMMC boot sin SD resuelto. Root cause: `get_mclk_offset()` chequeaba `CONFIG_MACH_SUN9I_A80` (no existe) en vez de `CONFIG_MACH_SUN9I`. | `notes/2026-05-26-emmc-boot-fix-clock-register.md` |
-| 2026-05-26 | Bookworm eMMC (2do boot) | 6.1.0-48-armmp | 2025.07-rc4 | eMMC sin SD | `dtb/sun9i-a80-cubieboard4.dtb` + U-Boot fix | ✅ OK | ~35s | Boot automático hasta Debian 12 login. Segundo boot consecutivo desde eMMC sin SD. WiFi `wlan0` OK. | `logs/2026-05-26-emmc-boot-2.log` |
+| 2026-05-26 | Bookworm eMMC (2do boot) | 6.1.0-48-armmp | 2025.07-rc4 | eMMC sin SD | `dtb/sun9i-a80-cubieboard4.dtb` + U-Boot fix | ✅ OK | ~35s | Boot automático hasta Debian 12 login. Segundo boot consecutivo desde eMMC sin SD. WiFi `wlan0` OK. | Resumen en `docs/estado-validado.md`; log raw no versionado |
 | 2026-05-27 | Bookworm eMMC (WiFi drive-strength fix) | 6.1.0-48-armmp | 2025.07-rc4 | eMMC sin SD | `dtb/sun9i-a80-cubieboard4.dtb` (`mmc1_pins` drive-strength 30) | ✅ OK | ~35s | WiFi `wlan0` funcional tras fix drive-strength 20→30mA. Transferido DTB vía serial. | `commit c19557f` |
+
+Validacion posterior no agregada como corrida de boot por falta de fecha y log
+raw: WiFi completo la asociacion, DHCP, DNS e Internet mediante
+`scripts/wifi-wizard.sh`. Por esa conexion se ejecuto una actualizacion de
+kernel que expuso las rutas hardcodeadas de `boot.scr`. Los hooks correctivos
+existen desde `5478570`, pero su validacion de upgrade/removal sigue pendiente.
 
 ## Criterios de estado
 
@@ -57,9 +63,7 @@ Registrar cada intento de boot con contexto suficiente para:
 4. Diferencias de U-Boot entre imágenes.
 5. Fuente insuficiente / inestable.
 
-## Próximo paso recomendado
+## Proximos pasos
 
-1. Probar build-sd-image.sh en Linux host end-to-end.
-2. Investigar Ethernet (link Gigabit Up pero 0 tráfico IPv4).
-3. Probar imágenes nuevas de Johan (2026-05-25+) con el builder.
-4. Bluetooth AP6330.
+Consultar [`../pendientes-implementacion.md`](../pendientes-implementacion.md),
+unico backlog activo del proyecto.

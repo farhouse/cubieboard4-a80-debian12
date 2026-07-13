@@ -99,5 +99,8 @@ eMMC boot sin SD: **EXITOSO**
 
 ## Upstream Note
 
-Enviar patch a upstream U-Boot: el typo afecta todos los boards sun9i-A80.
+Esta nota registro originalmente el envio como siguiente paso. Posteriormente,
+el parche se envio a `u-boot@lists.denx.de`, con CC a Andre Przywara, Peng Fan
+y Jaehoon Chung. Queda hacer seguimiento; no hay Message-ID versionado y no se
+debe inventar. El typo afecta todos los boards sun9i-A80:
 `CONFIG_MACH_SUN9I_A80` no existe, debe ser `CONFIG_MACH_SUN9I`.

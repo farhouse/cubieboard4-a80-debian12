@@ -1,6 +1,6 @@
 #!/bin/sh
 # Kernel post-install hook: regenerate boot.scr after kernel updates.
-# Install to /etc/kernel/postinst.d/regenerate-bootscr (and postrm.d).
+# Install to /etc/kernel/postinst.d/regenerate-bootscr.
 set -e
 
 version="$1"

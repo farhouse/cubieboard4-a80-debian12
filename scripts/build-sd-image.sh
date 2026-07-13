@@ -38,7 +38,7 @@ BOOT_SHA256="768d66822c61534083330951a4c6ce21493a892596f5a1fb86bef692ccda1411"
 ROOTFS_SHA256="f9bc8b5e61599d4a680eca63ddd09dcde5392ba5161325e1031eef9b574adffb"
 VENDOR_SD_SHA256="8af6f75dffa4b215fa40e254365f54de89510a2c0934b5ab4ac61e441eada3f5"
 UBOOT_FIX_SHA256="56e1ce91b886be77673d9c27278a8ddf71775052085bc4b18583368a899e1f5d"
-POSTINST_HOOK_SHA256="5b4f2ec4e5528bee26d1d9875acf97bffe17af1a76474852af23bc6b3ba6bf4a"
+POSTINST_HOOK_SHA256="923e6d05c8183d42e7c9dfd8de5096e4df70fbf2efa7a28957a6802ce6b977be"
 POSTRM_HOOK_SHA256="aef701139a650a0e8c11ee5459ca57ff5174d69756b5033e212b147cb56c69e2"
 INSTALLER_SHA256="9a59a46a265cfe96f37e2889b7ce4021ecb05c096351e1433f128765a2a35d98"
 WIFI_WIZARD_SHA256="0eea13a85ac039220705f5c3ee59f74010497287f0a9775838fef2aea87ff5fd"
@@ -66,7 +66,8 @@ Usage:
   sudo $SELF [--output FILE] [--work-dir DIR] [--interactive]
 
 Builds a Cubieboard4 Debian 12 SD image from preserved release assets, then
-patches the root filesystem with the validated DTB and AP6330 WiFi firmware.
+patches the root filesystem with the validated DTB, AP6330 WiFi firmware and
+kernel hooks that regenerate boot.scr after kernel installation or removal.
 
 Default assets:
   release: $RELEASE_BASE

@@ -1,6 +1,8 @@
 # Estado validado - Cubieboard4 A80 revive
 
-Fecha de consolidacion: 2026-05-27
+Fecha de consolidacion original: 2026-05-27
+
+Ultima actualizacion documental: 2026-07-13
 
 Este documento resume el estado estable del revive de la Cubieboard4 A80. Las
 notas en `notes/` quedan como bitacora de investigacion; este archivo debe
@@ -18,7 +20,7 @@ y DTB corregido. Quedaron validados:
 | Rootfs Bookworm | Funciona | Kernel `6.1.0-48-armmp` (eMMC), `6.1.0-37-armmp` (SD) |
 | Ethernet RTL8211E | Link Up sin IPv4 | Link Gigabit Full Duplex, pero 0 paquetes TX/RX. Posible MAC random filtrada |
 | USB Type-A | Funciona | Hub interno `05e3:0608`, pendrive probado en los 4 puertos |
-| WiFi AP6330 | Funciona | `wlan0` levanta y escanea redes; BCM4330/4, HT hasta 300 Mbps. Fix: drive-strength 20→30mA |
+| WiFi AP6330 | Funciona end-to-end | Asociacion, DHCP, DNS e Internet validados; `wifi-wizard.sh` completado. BCM4330/4, HT hasta 300 Mbps. Fix: drive-strength 20→30mA |
 | eMMC | Funciona | Boot sin microSD: SPL → U-Boot proper → kernel → Debian 12 login. Root cause: typo `CONFIG_MACH_SUN9I_A80` → `CONFIG_MACH_SUN9I` en `get_mclk_offset()` (`drivers/mmc/sunxi_mmc.c:649`) |
 | Bluetooth AP6330 | Pendiente | Firmware `bcm40183b2.hcd` localizado, falta configurar |
 | HDMI/VGA | Pendiente | No probado todavia |
@@ -151,6 +153,12 @@ Fix (commit `c19557f`):
 Resultado: `wlan0` funcional con MAC `e0:76:d0:b0:d1:ea`, HT 300 Mbps.
 DTB transferido a CB4 vía serial (base64 + tmux paste-buffer).
 
+La conectividad tambien quedo validada end-to-end: asociacion a la red, DHCP,
+DNS e Internet. El flujo completo de `scripts/wifi-wizard.sh` funciono. Esa
+conexion se uso para actualizar el kernel, prueba que expuso que el `boot.scr`
+existente tenia rutas de kernel e initrd hardcodeadas. No se agrego un log raw
+de esa prueba al repositorio.
+
 La inspeccion de imagenes vendor y Linaro mostro que el WiFi es AP6330/Broadcom
 en `mmc1`, SDIO 4-bit, pines `PG0-PG5`. El DTS base tenia `mmc1` con rasgos de
 eMMC, lo que bloqueaba el WiFi.
@@ -281,12 +289,19 @@ Validado en 2 boots exitosos consecutivos desde eMMC sin SD (2026-05-26).
 
 Referencia: `notes/2026-05-26-emmc-boot-fix-clock-register.md`.
 
-#### #### Build-sd-image.sh: DTB compilation from dts/ source
+#### Build-sd-image.sh: compilacion del DTB y scripts auxiliares
 
 El script `scripts/build-sd-image.sh` ahora compila el DTB desde
 `dts/sun9i-a80-cubieboard4.dts` usando `dtc`, en vez de descargarlo como asset
 del release. Esto elimina la dependencia de un release asset separado para el
 DTB y asegura que siempre se use la versión correcta.
+
+El builder instala ademas el U-Boot corregido, hooks `postinst`/`postrm` para
+regenerar `boot.scr` y los helpers elegidos por el perfil. Desde `a5e9a48`, los
+auxiliares faltantes se descargan desde el repositorio y se verifican por
+SHA256, lo que permite ejecutar el builder fuera de un clon. La implementacion
+esta completa, pero esa version y los hooks aun no tienen validacion
+end-to-end en un host Linux y la placa.
 
 Riesgos
 
@@ -430,12 +445,17 @@ wlan0: ether e0:76:d0:b0:d1:ea
 Validacion final:
 
 ```sh
-ifconfig wlan0 up
-iw dev wlan0 scan
+iw dev wlan0 link
+ip -4 addr show wlan0
+ip route
+getent hosts debian.org
 ```
 
-Resultado: `wlan0` escanea redes y reporta HT hasta 300 Mbps. Evidencia:
-`logs/2026-05-22-final-wifi-validation.log`.
+Resultado: `wlan0` asocia, obtiene direccion por DHCP, resuelve DNS y accede a
+Internet. Reporta HT hasta 300 Mbps. El log versionado
+`logs/2026-05-22-final-wifi-validation.log` cubre la validacion inicial de
+interfaz y scan; la validacion end-to-end posterior fue confirmada en hardware,
+pero no tiene log raw versionado.
 
 ## Comandos de verificacion
 
@@ -456,8 +476,9 @@ cat /sys/kernel/debug/usb/devices
 WiFi:
 
 ```sh
-ifconfig wlan0 up
-iw dev wlan0 scan
+iw dev wlan0 link
+ip -4 addr show wlan0
+getent hosts debian.org
 ```
 
 Ethernet:
@@ -475,7 +496,8 @@ picocom -b 115200 --databits 8 --parity n --stopbits 1 --flow n /dev/cu.usbseria
 ## Evidencia y documentos relacionados
 
 - `docs/boot/matriz-pruebas-arranque.md`: matriz cronologica de pruebas.
-- `logs/2026-05-22-final-wifi-validation.log`: evidencia limpia final de WiFi y Ethernet.
+- `logs/2026-05-22-final-wifi-validation.log`: evidencia de la validacion
+  inicial de WiFi y del link Ethernet.
 - `logs/serial-live.log`: log historico de bring-up; contiene errores previos y salida ruidosa.
 - `notes/2026-05-22-handoff-final.md`: handoff final de la sesion.
 - `notes/2026-05-22-wifi-ap6330.md`: resolucion especifica del WiFi.
@@ -489,15 +511,11 @@ picocom -b 115200 --databits 8 --parity n --stopbits 1 --flow n /dev/cu.usbseria
 
 ## Pendientes
 
-1. Bluetooth AP6330: instalar/configurar `bcm40183b2.hcd` y validar UART/GPIOs BT.
-2. Conectividad WiFi completa: instalar `wpasupplicant` o `iwd` y probar asociacion a red.
-3. Ethernet: investigar por qué hay link Gigabit pero 0 tráfico IPv4.
-4. HDMI/VGA: probar salida de video.
-5. Capturar un boot log limpio completo con el DTB final, sin payloads de transferencia.
-6. Promover o guardar referencias FEX en `docs/device-tree/` como tabla FEX -> DTS.
-7. Enviar patch upstream: typo `CONFIG_MACH_SUN9I_A80` en `drivers/mmc/sunxi_mmc.c` afecta todos los sun9i-A80.
-8. Probar el `build-sd-image.sh` en Linux host end-to-end y validar imagen resultante.
-9. Probar nuevas imágenes de Johan (2026-05-25+) con el builder.
+El backlog activo se mantiene unicamente en
+[`pendientes-implementacion.md`](pendientes-implementacion.md), con prioridad y
+criterios de cierre. WiFi ya no es un pendiente. El parche U-Boot ya fue
+enviado a `u-boot@lists.denx.de`; queda su seguimiento, no su envio inicial. No
+se dispone de Message-ID versionado.
 
 ## Estado de commits
 
@@ -518,4 +536,7 @@ e2e4fb5 fix(emmc): get_mclk_offset() typo CONFIG_MACH_SUN9I_A80 → CONFIG_MACH_
 ae1db1f docs(patches): emit patch files for u-boot and dts fixes
 02c5eba fix(build): update DTB SHA256 for drive-strength fix
 b32b6b1 refactor(build): compile DTB from dts/ source instead of downloading release asset
+3947c49 fix(wifi): stabilize mmc aliases and improve host diagnostics
+5478570 fix(boot): add kernel post-install/removal hooks to auto-regenerate boot.scr
+a5e9a48 fix(build): support verified remote helper downloads
 ```

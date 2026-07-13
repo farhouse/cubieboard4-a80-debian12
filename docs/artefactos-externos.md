@@ -74,6 +74,13 @@ asset). Luego genera una imagen SD, instala el DTB compilado y copia:
 - `fw_bcm40183b2_ag.bin` a `lib/firmware/brcm/brcmfmac4330-sdio.bin`
 - `nvram_ap6330.txt` a `lib/firmware/brcm/brcmfmac4330-sdio.txt`
 
+También instala el U-Boot corregido y los hooks de regeneración de `boot.scr`.
+Desde `a5e9a48`, si el builder se ejecuta fuera de un clon, descarga desde el
+repositorio los hooks, el instalador eMMC y el wizard WiFi que correspondan, y
+verifica cada uno con su SHA256 antes de copiarlo al rootfs. Esta ruta remota y
+los hooks todavía requieren validación end-to-end en Linux/hardware; ver
+[`pendientes-implementacion.md`](pendientes-implementacion.md).
+
 ## Nota de licenciamiento
 
 Las imagenes vendor pueden contener blobs y firmware propietarios. Se conservan

@@ -24,10 +24,13 @@
 
 > ⚠️ Estas capacidades dependen de drivers, stack de kernel y soporte real en la distro usada.
 
-## Conectividad / I/O (a validar en placa)
+## Conectividad / I/O
 
 - Puerto OTG microUSB 3.0 (mencionado en referencias)
-- Salidas de video y resto de periféricos: **validar según revisión exacta de placa + documentación del fabricante**
+- USB Type-A: cuatro puertos validados mediante el hub interno `05e3:0608`.
+- WiFi AP6330: asociación, DHCP, DNS e Internet validados.
+- Ethernet RTL8211E: link Gigabit Full Duplex, sin tráfico validado.
+- Salidas de video y resto de periféricos: **validar según revisión exacta de placa + documentación del fabricante**.
 
 ## Sistema operativo objetivo (para revive)
 
@@ -42,10 +45,10 @@ Para este proyecto conviene priorizar:
 
 Checklist mínimo en laboratorio:
 - [ ] Confirmar modelo exacto serigrafiado en placa
-- [ ] Confirmar capacidad de RAM visible por sistema
+- [x] Confirmar capacidad de RAM visible por sistema (2 GiB)
 - [x] Confirmar eMMC detectada y tamaño real
-- [ ] Confirmar salida serial durante boot
-- [ ] Confirmar migracion/boot de Debian 12 desde eMMC
+- [x] Confirmar salida serial durante boot (`115200 8N1`)
+- [x] Confirmar migracion/boot de Debian 12 desde eMMC
 
 ## Fuentes consultadas (iniciales)
 
@@ -54,9 +57,12 @@ Checklist mínimo en laboratorio:
 
 ---
 
-## Pendiente recomendado
+## Ampliaciones de referencia
 
 Completar este archivo con:
 - enlaces oficiales del fabricante (si siguen disponibles),
 - snapshots/archivos archivados confiables,
 - resultados medidos en la placa real durante el bring-up.
+
+Los trabajos activos se mantienen en
+[`../pendientes-implementacion.md`](../pendientes-implementacion.md).
