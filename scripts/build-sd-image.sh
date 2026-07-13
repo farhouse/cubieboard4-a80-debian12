@@ -3,6 +3,11 @@ set -euo pipefail
 
 SELF="$(basename "$0")"
 
+SCRIPT_DIR=""
+if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]}" ]; then
+	SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
+
 RELEASE_BASE="https://github.com/farhouse/cubieboard4-a80-debian12/releases/download/external-images-2026-05"
 RAW_BASE="https://raw.githubusercontent.com/farhouse/cubieboard4-a80-debian12/main"
 WORK_DIR="build/sd-image"
@@ -33,6 +38,10 @@ BOOT_SHA256="768d66822c61534083330951a4c6ce21493a892596f5a1fb86bef692ccda1411"
 ROOTFS_SHA256="f9bc8b5e61599d4a680eca63ddd09dcde5392ba5161325e1031eef9b574adffb"
 VENDOR_SD_SHA256="8af6f75dffa4b215fa40e254365f54de89510a2c0934b5ab4ac61e441eada3f5"
 UBOOT_FIX_SHA256="56e1ce91b886be77673d9c27278a8ddf71775052085bc4b18583368a899e1f5d"
+POSTINST_HOOK_SHA256="5b4f2ec4e5528bee26d1d9875acf97bffe17af1a76474852af23bc6b3ba6bf4a"
+POSTRM_HOOK_SHA256="aef701139a650a0e8c11ee5459ca57ff5174d69756b5033e212b147cb56c69e2"
+INSTALLER_SHA256="9a59a46a265cfe96f37e2889b7ce4021ecb05c096351e1433f128765a2a35d98"
+WIFI_WIZARD_SHA256="0eea13a85ac039220705f5c3ee59f74010497287f0a9775838fef2aea87ff5fd"
 
 CACHE_DIR=""
 ROOT_MOUNT=""
@@ -163,6 +172,49 @@ download_asset() {
 		die "required command not found: curl or wget"
 	fi
 	mv "$dest.tmp" "$dest"
+}
+
+download_repo_script() {
+	local name="$1"
+	local expected="$2"
+	local local_path=""
+	local dest="$CACHE_DIR/repo-scripts/$name"
+	local url="$RAW_BASE/scripts/$name"
+
+	if [ -n "$SCRIPT_DIR" ]; then
+		local_path="$SCRIPT_DIR/$name"
+	fi
+
+	if [ -n "$local_path" ] && [ -f "$local_path" ]; then
+		verify_sha256 "$local_path" "$expected"
+		REPO_SCRIPT="$local_path"
+		return
+	fi
+
+	if [ ! -f "$dest" ]; then
+		[ "$DOWNLOAD" -eq 1 ] || die "missing repository script and --skip-download was used: $name"
+		log "Downloading repository script: $url"
+		mkdir -p "$(dirname "$dest")"
+		if command -v curl >/dev/null 2>&1; then
+			curl -L --connect-timeout 15 --max-time 60 --fail --output "$dest.tmp" "$url" || {
+				rm -f "$dest.tmp"
+				die "curl failed — check network / URL: $url"
+			}
+		elif command -v wget >/dev/null 2>&1; then
+			wget --timeout=15 -O "$dest.tmp" "$url" || {
+				rm -f "$dest.tmp"
+				die "wget failed — check network / URL: $url"
+			}
+		else
+			die "required command not found: curl or wget"
+		fi
+		mv "$dest.tmp" "$dest"
+	else
+		log "Using cached repository script: $dest"
+	fi
+
+	verify_sha256 "$dest" "$expected"
+	REPO_SCRIPT="$dest"
 }
 
 verify_sha256() {
@@ -661,32 +713,28 @@ install -D -m 0644 "$CACHE_DIR/$UBOOT_FIX_ASSET" "$ROOT_MOUNT/boot/u-boot-sunxi-
 
 # ── Kernel post-install/removal hooks ─────────────────────────
 log "Installing kernel post-install/removal hooks"
-install -D -m 0755 "$(dirname "$0")/regenerate-bootscr-hook" \
-    "$ROOT_MOUNT/etc/kernel/postinst.d/regenerate-bootscr"
-install -D -m 0755 "$(dirname "$0")/regenerate-bootscr-rmhook" \
-    "$ROOT_MOUNT/etc/kernel/postrm.d/regenerate-bootscr"
+download_repo_script "regenerate-bootscr-hook" "$POSTINST_HOOK_SHA256"
+POSTINST_HOOK="$REPO_SCRIPT"
+download_repo_script "regenerate-bootscr-rmhook" "$POSTRM_HOOK_SHA256"
+POSTRM_HOOK="$REPO_SCRIPT"
+install -D -m 0755 "$POSTINST_HOOK" "$ROOT_MOUNT/etc/kernel/postinst.d/regenerate-bootscr"
+install -D -m 0755 "$POSTRM_HOOK" "$ROOT_MOUNT/etc/kernel/postrm.d/regenerate-bootscr"
 
 # ── Install helper scripts ────────────────────────────────────
 if [ "$WITH_INSTALLER" -eq 1 ]; then
 	log "Installing install-to-emmc.sh to /root/"
-	if [ -f "$(dirname "$0")/install-to-emmc.sh" ]; then
-		install -D -m 0755 "$(dirname "$0")/install-to-emmc.sh" "$ROOT_MOUNT/root/install-to-emmc.sh"
-	else
-		curl -sL --fail "$RAW_BASE/scripts/install-to-emmc.sh" -o "$ROOT_MOUNT/root/install-to-emmc.sh"
-		chmod 0755 "$ROOT_MOUNT/root/install-to-emmc.sh"
-	fi
+	download_repo_script "install-to-emmc.sh" "$INSTALLER_SHA256"
+	install -D -m 0755 "$REPO_SCRIPT" "$ROOT_MOUNT/root/install-to-emmc.sh"
+	install -m 0755 "$POSTINST_HOOK" "$ROOT_MOUNT/root/regenerate-bootscr-hook"
+	install -m 0755 "$POSTRM_HOOK" "$ROOT_MOUNT/root/regenerate-bootscr-rmhook"
 else
 	log "Skipping install-to-emmc.sh"
 fi
 
 if [ "$WITH_WIFI_WIZARD" -eq 1 ]; then
 	log "Installing wifi-wizard.sh to /root/"
-	if [ -f "$(dirname "$0")/wifi-wizard.sh" ]; then
-		install -D -m 0755 "$(dirname "$0")/wifi-wizard.sh" "$ROOT_MOUNT/root/wifi-wizard.sh"
-	else
-		curl -sL --fail "$RAW_BASE/scripts/wifi-wizard.sh" -o "$ROOT_MOUNT/root/wifi-wizard.sh"
-		chmod 0755 "$ROOT_MOUNT/root/wifi-wizard.sh"
-	fi
+	download_repo_script "wifi-wizard.sh" "$WIFI_WIZARD_SHA256"
+	install -D -m 0755 "$REPO_SCRIPT" "$ROOT_MOUNT/root/wifi-wizard.sh"
 else
 	log "Skipping wifi-wizard.sh"
 fi
